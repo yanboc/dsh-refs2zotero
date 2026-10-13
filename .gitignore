@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+
+# 本机规格与 OpenSpec 的 Cursor 技能，不入库
+openspec/
+.agents/
+.cursor/
+
+# 本机 pnpm 内容寻址存储（安装依赖时生成本地 store 才会出现）
+.pnpm-store/
