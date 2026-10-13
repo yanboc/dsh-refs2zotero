@@ -13,6 +13,10 @@ export function initialState() {
     notice: '',
     saving: false,
     fetching: [],
+    sortKey: 'title',
+    sortAsc: true,
+    showArchived: false,
+    flash: { collection: 0, rows: 0 },
   }
 }
 
@@ -53,7 +57,7 @@ export function reduce(state, action) {
     return { ...state, selected }
   }
   if (action.type === 'selectAll') {
-    const visible = filterRefs(state.refs, state.query).map(ref => ref.id)
+    const visible = visibleRows(state).map(ref => ref.id)
     const allOn = visible.length > 0 && visible.every(id => state.selected.includes(id))
     const selected = allOn
       ? state.selected.filter(id => !visible.includes(id))
@@ -64,18 +68,40 @@ export function reduce(state, action) {
     return { ...state, previewId: state.previewId === action.id ? null : action.id }
   }
   if (action.type === 'collection') return { ...state, collectionId: action.id ?? '' }
-  if (action.type === 'fetching') return { ...state, fetching: action.ids ?? [] }
-  if (action.type === 'remove') {
+  if (action.type === 'sort') return { ...state, sortKey: action.key ?? state.sortKey }
+  if (action.type === 'order') return { ...state, sortAsc: !state.sortAsc }
+  if (action.type === 'toggleArchived') return { ...state, showArchived: !state.showArchived }
+  if (action.type === 'setArchived') {
     return {
       ...state,
-      refs: state.refs.filter(ref => ref.id !== action.id),
-      selected: state.selected.filter(id => id !== action.id),
-      previewId: state.previewId === action.id ? null : state.previewId,
+      refs: state.refs.map(ref => (ref.id === action.id ? { ...ref, archived: Boolean(action.value) } : ref)),
+    }
+  }
+  if (action.type === 'fetching') return { ...state, fetching: action.ids ?? [] }
+  if (action.type === 'flash') {
+    return {
+      ...state,
+      flash: {
+        collection: state.flash.collection + (action.collection ? 1 : 0),
+        rows: state.flash.rows + (action.rows ? 1 : 0),
+      },
     }
   }
   if (action.type === 'message') return { ...state, message: action.text ?? '' }
   if (action.type === 'saving') return { ...state, saving: Boolean(action.value) }
   return state
+}
+
+/**
+ * The rows in the order the user asked to see them: search, then the archived
+ * gate, then the sort.
+ * @param {PanelState} state
+ * @returns {any[]}
+ */
+export function visibleRows(state) {
+  const searched = filterRefs(state.refs, state.query)
+  const shown = state.showArchived ? searched : searched.filter(ref => !ref.archived)
+  return sortRefs(shown, state.sortKey, state.sortAsc)
 }
 
 /**
@@ -91,18 +117,49 @@ export function filterRefs(refs, query) {
 }
 
 /**
+ * @param {Array<{ id: string, title?: string, authors?: string, year?: string }>} refs
+ * @param {string} key
+ * @param {boolean} asc
+ */
+export function sortRefs(refs, key, asc) {
+  const byKey = {
+    title: ref => String(ref.title ?? '').toLowerCase(),
+    authors: ref => String(ref.authors ?? '').toLowerCase(),
+    year: ref => {
+      const year = Number(ref.year)
+      // Number('') is 0, so treat an empty/missing year as "no year", not 0.
+      return (ref.year === '' || ref.year == null || !Number.isFinite(year)) ? Number.POSITIVE_INFINITY : year
+    },
+  }[key] ?? (ref => String(ref.title ?? '').toLowerCase())
+
+  // Rows without a value for the key always sink to the bottom, whichever
+  // direction: an entry with no year is the least useful in either order.
+  const valued = refs.filter(ref => byKey(ref) !== Number.POSITIVE_INFINITY)
+  const missing = refs.filter(ref => byKey(ref) === Number.POSITIVE_INFINITY)
+  const sorted = valued.sort((left, right) => {
+    const a = byKey(left)
+    const b = byKey(right)
+    if (typeof a === 'number' && typeof b === 'number') return a - b
+    return String(a).localeCompare(String(b))
+  })
+  return asc ? [...sorted, ...missing] : [...sorted.reverse(), ...missing]
+}
+
+/**
  * @param {PanelState} state
  */
 export function viewModel(state) {
-  const rows = filterRefs(state.refs, state.query)
+  const rows = visibleRows(state)
   const preview = state.refs.find(ref => ref.id === state.previewId) ?? null
   const canSave = state.selected.length > 0 && state.collectionId.length > 0 && !state.saving
+  const archivedCount = state.refs.filter(ref => ref.archived).length
   return {
     rows,
     preview,
     allSelected: rows.length > 0 && rows.every(ref => state.selected.includes(ref.id)),
     canSave,
     saveHint: saveHint(state, canSave),
+    archivedCount,
   }
 }
 

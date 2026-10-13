@@ -178,19 +178,30 @@ test('http handler only accepts post json', async () => {
   }
 })
 
-test('forget removes the row and records the decision', async () => {
+test('archive and unarchive flip the archived flag and persist', async () => {
   const store = createStore()
   store.upsert('s1', ref)
-  const added = []
-  const result = await handleApiRequest({ op: 'forget', sessionId: 's1', id: ref.id }, {
-    store,
-    ignored: { add: (sessionId, id) => added.push(`${sessionId}:${id}`) },
-    zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
-  })
-  assert.equal(result.ok, true)
-  assert.deepEqual(store.list('s1'), [])
-  assert.deepEqual(added, [`s1:${ref.id}`])
-  assert.equal((await handleApiRequest({ op: 'forget', sessionId: 's1' }, { store })).ok, false)
+  const state = { archived: new Set() }
+  const archived = {
+    archive: (sessionId, id) => state.archived.add(`${sessionId}:${id}`),
+    unarchive: (sessionId, id) => state.archived.delete(`${sessionId}:${id}`),
+    isArchived: (sessionId, id) => state.archived.has(`${sessionId}:${id}`),
+  }
+  const deps = { store, archived, zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) } }
+
+  const on = await handleApiRequest({ op: 'archive', sessionId: 's1', id: ref.id }, deps)
+  assert.equal(on.ok, true)
+  assert.equal(on.archived, true)
+  // The row stays; only the flag changes.
+  assert.equal(store.list('s1').length, 1)
+  let listed = await handleApiRequest({ op: 'list', sessionId: 's1' }, deps)
+  assert.equal(listed.refs[0].archived, true)
+
+  const off = await handleApiRequest({ op: 'unarchive', sessionId: 's1', id: ref.id }, deps)
+  assert.equal(off.ok, true)
+  listed = await handleApiRequest({ op: 'list', sessionId: 's1' }, deps)
+  assert.equal(listed.refs[0].archived, false)
+  assert.equal((await handleApiRequest({ op: 'archive', sessionId: 's1' }, { store })).ok, false)
 })
 
 test('fetchPdf downloads a found pdf and attaches it to the row', async () => {

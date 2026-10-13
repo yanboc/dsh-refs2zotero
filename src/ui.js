@@ -28,22 +28,34 @@ export const CSS = `
 .zr-item:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
 .zr-item[data-selected='true'] { background: var(--dsw-alias-interactive-bg-active); }
 .zr-item[data-selected='true']::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: var(--dsw-alias-state-business-primary); }
-.zr-title { font: var(--dsw-font-xxs-strong-12); color: var(--dsw-alias-label-primary); line-height: 1.45; overflow-wrap: anywhere; }
-.zr-meta { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+/* Line 1 = checkbox + wrapped title; line 2 = meta + chips + actions. */
+.zr-line1 { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.zr-check { flex: none; margin-top: 2px; width: 14px; height: 14px; accent-color: var(--dsw-alias-state-business-primary); cursor: pointer; }
+.zr-title { flex: 1; min-width: 0; font: var(--dsw-font-xxs-strong-12); color: var(--dsw-alias-label-primary); line-height: 1.45; overflow-wrap: anywhere; }
+.zr-meta { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); padding-left: 20px; }
 .zr-metaText { min-width: 0; overflow-wrap: anywhere; }
 .zr-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; opacity: 0; transition: opacity 120ms var(--ds-ease-in-out); }
 .zr-item:hover .zr-actions, .zr-item:focus-within .zr-actions { opacity: 1; }
 @media (hover: none) { .zr-actions { opacity: 1; } }
-.zr-chip { box-sizing: border-box; display: inline-flex; align-items: center; gap: 4px; flex: none; height: 18px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-11); white-space: nowrap; }
-.zr-chip[data-tone='business'] { color: var(--dsw-alias-state-business-primary); }
-.zr-chip[data-tone='warn'] { color: var(--dsw-alias-state-warn-primary); }
-.zr-chip[data-tone='muted'] { color: var(--dsw-alias-label-tertiary); }
+/* A status badge that doubles as an action: the resting label swaps for the
+   action label on hover. */
+.zr-badge { box-sizing: border-box; display: inline-flex; align-items: center; flex: none; height: 18px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; background: none; color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-11); white-space: nowrap; }
+button.zr-badge { cursor: pointer; }
+button.zr-badge:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+button.zr-badge:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
+button.zr-badge:disabled { opacity: 0.5; cursor: default; }
+.zr-badgeHover { display: none; }
+button.zr-badge:hover .zr-badgeRest { display: none; }
+button.zr-badge:hover .zr-badgeHover { display: inline; }
+.zr-badge[data-tone='business'] { color: var(--dsw-alias-state-business-primary); }
+.zr-badge[data-tone='warn'] { color: var(--dsw-alias-state-warn-primary); }
+.zr-badge[data-tone='muted'] { color: var(--dsw-alias-label-tertiary); }
 .zr-icon { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: 3px; background: none; color: var(--dsw-alias-label-secondary); cursor: pointer; }
 .zr-icon:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .zr-icon:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
-.zr-icon[data-danger='true']:hover { color: var(--dsw-alias-state-error-primary); }
+.zr-icon[data-active='true'] { color: var(--dsw-alias-state-business-primary); }
 .zr-icon:disabled { opacity: 0.4; cursor: default; }
-.zr-preview { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; }
+.zr-preview { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px 20px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; }
 .zr-line { color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-11); overflow-wrap: anywhere; }
 .zr-abstract { color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxs-12); line-height: 1.6; max-height: 168px; overflow-y: auto; }
 .zr-proposal { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border: 1px dashed var(--dsw-alias-state-business-primary); border-radius: 4px; }
@@ -59,11 +71,17 @@ export const CSS = `
 .zr-footRow { display: flex; align-items: center; gap: 6px; }
 .zr-select { flex: 1; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: var(--dsw-font-xxs-12); }
 .zr-select:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
+/* A compact control for the sort band. */
+.zr-control { height: 22px; padding: 0 4px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 3px; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-11); }
+.zr-control:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
 .zr-primary { box-sizing: border-box; flex: none; height: 28px; padding: 0 12px; border: none; border-radius: 3px; background: var(--dsw-alias-state-business-primary); color: var(--dsw-alias-bg-base); font: var(--dsw-font-xxs-strong-12); cursor: pointer; }
-.zr-primary:disabled { opacity: 0.4; cursor: default; }
+.zr-primary[data-disabled='true'] { opacity: 0.4; cursor: default; }
 .zr-hint { min-width: 0; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+/* The "you still need to pick this" flash: a warn ring that pulses twice. */
+.zr-flash { animation: zr-flash 600ms var(--ds-ease-in-out) 2; }
+@keyframes zr-flash { 0% { box-shadow: 0 0 0 2px var(--dsw-alias-state-warn-primary); } 70% { box-shadow: 0 0 0 2px var(--dsw-alias-state-warn-primary); } 100% { box-shadow: none; } }
 @keyframes dsh-row-in { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .zr-item { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .zr-item { animation: none; } .zr-flash { animation: none; } }
 `
 
 /**
@@ -90,7 +108,7 @@ export function createAtoms(React) {
     className: 'zr-icon',
     title: props.title,
     'aria-label': props.title,
-    'data-danger': props.danger ? 'true' : undefined,
+    'data-active': props.active ? 'true' : undefined,
     disabled: props.disabled,
     onClick: event => {
       event.stopPropagation()
@@ -98,15 +116,31 @@ export function createAtoms(React) {
     },
   }, props.children)
 
-  const Chip = ({ tone, children }) => h('span', { className: 'zr-chip', 'data-tone': tone }, children)
+  /**
+   * A status that is also an action: shows `rest` by default, swaps to `hover`
+   * on hover, and calls `onClick` when clicked. Without `onClick` it is a plain
+   * static badge.
+   */
+  const Badge = ({ rest, hover, tone, onClick, disabled }) => h(
+    onClick ? 'button' : 'span',
+    {
+      className: 'zr-badge',
+      type: onClick ? 'button' : undefined,
+      'data-tone': tone,
+      disabled: onClick ? disabled : undefined,
+      onClick: onClick ? event => { event.stopPropagation(); onClick() } : undefined,
+    },
+    h('span', { className: 'zr-badgeRest' }, rest),
+    onClick ? h('span', { className: 'zr-badgeHover' }, hover) : null,
+  )
 
   /** Two-line glyphs, 14px, matching the sidebar's own icon weight. */
-  const Glyph = ({ path, size = 14 }) => h('svg', {
+  const Glyph = ({ paths, size = 14 }) => h('svg', {
     width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
     stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
-  }, h('path', { d: path }))
+  }, (Array.isArray(paths) ? paths : [paths]).map((d, index) => h('path', { key: index, d })))
 
-  return { IconButton, Chip, Glyph }
+  return { IconButton, Badge, Glyph }
 }
 
 export const GLYPH = {
@@ -114,5 +148,11 @@ export const GLYPH = {
   download: 'M8 2v8m0 0L5 7m3 3l3-3M3 13h10',
   close: 'M4 4l8 8M12 4l-8 8',
   check: 'M3.5 8.5l3 3 6-6',
+  // A file box (archive). The lid line + handle.
+  archive: 'M3 5h10v9H3z M6 5V3h4v2 M7 8.5h2',
+  // Same box with an up arrow: restore from archive.
+  restore: 'M3 5h10v9H3z M6 5V3h4v2 M8 8v2.5 M6.5 8.5L8 7l1.5 1.5',
+  eye: ['M2 8s2.5-3.5 6-3.5S14 8 14 8s-2.5 3.5-6 3.5S2 8 2 8z', 'M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z'],
+  arrowUp: 'M8 12V4m0 0L5 7m3-3l3 3',
+  arrowDown: 'M8 4v8m0 0l3-3m-3 3l-3-3',
 }
-

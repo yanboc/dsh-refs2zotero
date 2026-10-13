@@ -63,7 +63,7 @@ test('a page read in a session is saved into a chosen collection with its pdf', 
 
     // 2. The sidebar asks for the collections to offer.
     const collections = await postJson(plugin.url, { op: 'collections' })
-    assert.deepEqual(collections.collections, [{ id: 'C1', name: 'Deepseek Research', level: 1 }])
+    assert.deepEqual(collections.collections, [{ id: 'C1', name: 'Deepseek Research', path: 'Deepseek Research' }])
 
     // 3. The user picks the row and the collection, and writes.
     const saved = await postJson(plugin.url, {

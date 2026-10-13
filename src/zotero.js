@@ -30,13 +30,23 @@ export function createZotero(options = {}) {
     if (status !== 200 || !data || !Array.isArray(data.targets)) {
       throw new Error(text || '读不到 Zotero 分类')
     }
-    return data.targets
+    const items = data.targets
       .filter(target => target && typeof target.id === 'string' && target.id.length > 0)
       .map(target => ({
         id: target.id,
         name: typeof target.name === 'string' ? target.name : target.id,
         level: typeof target.level === 'number' ? target.level : 0,
       }))
+    // The connector lists the tree flattened, depth-first, with only an indent
+    // level. Rebuild a readable path (e.g. "我的文库 / Deepseek Research") so the
+    // dropdown shows hierarchy without the leading dots.
+    const stack = []
+    return items.map(item => {
+      while (stack.length > 0 && stack[stack.length - 1].level >= item.level) stack.pop()
+      const path = [...stack.map(parent => parent.name), item.name].join(' / ')
+      stack.push(item)
+      return { id: item.id, name: item.name, path }
+    })
   }
 
   /**

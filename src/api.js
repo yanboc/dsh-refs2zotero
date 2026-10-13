@@ -4,7 +4,7 @@ import { loadPdfSource } from './pdf.js'
 
 /**
  * @param {Record<string, unknown>} body
- * @param {{ store: { list: (id: string) => any[], forget: (sessionId: string, id: string) => void, attach: (sessionId: string, id: string, pdf: Record<string, unknown>) => unknown }, zotero: { collections: () => Promise<any[]>, findByDoi: (doi: string) => Promise<boolean>, save: (refs: any[], collectionId: string) => Promise<any> }, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> }, ignored?: { add: (sessionId: string, id: string) => void }, fetch?: typeof fetch, pdfDir?: string }} deps
+ * @param {{ store: { list: (id: string) => any[], forget: (sessionId: string, id: string) => void, attach: (sessionId: string, id: string, pdf: Record<string, unknown>) => unknown }, zotero: { collections: () => Promise<any[]>, findByDoi: (doi: string) => Promise<boolean>, save: (refs: any[], collectionId: string) => Promise<any> }, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> }, archived?: { archive: (sessionId: string, id: string) => void, unarchive: (sessionId: string, id: string) => void, isArchived: (sessionId: string, id: string) => boolean }, fetch?: typeof fetch, pdfDir?: string }} deps
  */
 export async function handleApiRequest(body, deps) {
   if (!body || typeof body !== 'object') return { ok: false, error: '请求不是 JSON 对象' }
@@ -22,7 +22,7 @@ export async function handleApiRequest(body, deps) {
           inLibrary = false
         }
       }
-      refs.push(publicRef(ref, inLibrary))
+      refs.push(publicRef(ref, inLibrary, deps.archived?.isArchived(body.sessionId, ref.id) ?? false))
     }
     return { ok: true, refs }
   }
@@ -59,13 +59,15 @@ export async function handleApiRequest(body, deps) {
     if (!row) return { ok: false, error: '这一行不在了' }
     return { ok: true, accepted }
   }
-  if (body.op === 'forget') {
+  if (body.op === 'archive' || body.op === 'unarchive') {
     if (typeof body.sessionId !== 'string' || typeof body.id !== 'string') {
-      return { ok: false, error: '忽略需要 sessionId 和 id' }
+      return { ok: false, error: '归档需要 sessionId 和 id' }
     }
-    deps.store.forget(body.sessionId, body.id)
-    deps.ignored?.add(body.sessionId, body.id)
-    return { ok: true }
+    const setArchived = body.op === 'archive'
+    if (!deps.archived) return { ok: false, error: '归档不可用' }
+    if (setArchived) deps.archived.archive(body.sessionId, body.id)
+    else deps.archived.unarchive(body.sessionId, body.id)
+    return { ok: true, archived: setArchived }
   }
   if (body.op === 'fetchPdf') {
     const ids = Array.isArray(body.ids) ? body.ids.filter(id => typeof id === 'string') : []
@@ -129,7 +131,7 @@ export async function handleApiRequest(body, deps) {
 /**
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
- * @param {{ store: any, zotero: any, proposer?: any, ignored?: any, fetch?: typeof fetch, pdfDir?: string }} deps
+ * @param {{ store: any, zotero: any, proposer?: any, archived?: any, fetch?: typeof fetch, pdfDir?: string }} deps
  */
 export async function handleHttp(req, res, deps) {
   try {
@@ -156,7 +158,7 @@ export async function handleHttp(req, res, deps) {
  * @param {Record<string, any>} ref
  * @param {boolean} inLibrary
  */
-function publicRef(ref, inLibrary) {
+function publicRef(ref, inLibrary, archived) {
   const meta = ref.resolved ?? {}
   return {
     id: ref.id,
@@ -182,6 +184,7 @@ function publicRef(ref, inLibrary) {
     canPropose: Boolean(ref.excerpt && ref.excerpt.trim().length >= 40),
     proposalState: ref.proposalState ?? '',
     inLibrary,
+    archived: Boolean(archived),
   }
 }
 

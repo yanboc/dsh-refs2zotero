@@ -6,7 +6,7 @@ import { GLYPH, createAtoms, ensureStyle } from './ui.js'
  */
 export function createApply(React) {
   const { createElement: h, useEffect, useReducer } = React
-  const { IconButton, Chip, Glyph } = createAtoms(React)
+  const { IconButton, Badge, Glyph } = createAtoms(React)
   ensureStyle()
 
   function Panel({ sessionId, visible }) {
@@ -30,8 +30,6 @@ export function createApply(React) {
         if (stop) return
         dispatch({
           type: 'sync',
-          // Omit what failed so a transient error cannot wipe the list or the
-          // collection choices out from under the user.
           ...(listed.ok ? { refs: listed.refs } : {}),
           ...(cols.ok ? { collections: cols.collections } : {}),
           error: !listed.ok ? listed.error : !cols.ok ? cols.error : '',
@@ -55,15 +53,11 @@ export function createApply(React) {
 
     const model = viewModel(state)
 
-    async function onSave() {
+    async function onSave(ids) {
+      if (ids.length === 0) return
       dispatch({ type: 'saving', value: true })
       dispatch({ type: 'message', text: '' })
-      const result = await post({
-        op: 'save',
-        sessionId,
-        ids: state.selected,
-        collectionId: state.collectionId,
-      })
+      const result = await post({ op: 'save', sessionId, ids, collectionId: state.collectionId })
       dispatch({ type: 'saving', value: false })
       if (!result.ok) {
         dispatch({ type: 'message', text: result.error || '保存失败' })
@@ -74,6 +68,14 @@ export function createApply(React) {
       for (const item of result.failed ?? []) parts.push(item.reason)
       for (const item of result.warnings ?? []) parts.push(item.reason)
       dispatch({ type: 'message', text: parts.join('，') })
+    }
+
+    async function onAddToLibrary(id) {
+      if (!state.collectionId) {
+        dispatch({ type: 'flash', collection: true })
+        return
+      }
+      await onSave([id])
     }
 
     async function onPropose(id) {
@@ -103,13 +105,24 @@ export function createApply(React) {
       dispatch({ type: 'message', text: parts.join('，') })
     }
 
-    async function onForget(id) {
-      dispatch({ type: 'remove', id })
-      const result = await post({ op: 'forget', sessionId, id })
-      if (!result.ok) dispatch({ type: 'message', text: result.error || '忽略失败' })
+    async function onToggleArchived(id, currentlyArchived) {
+      dispatch({ type: 'setArchived', id, value: !currentlyArchived })
+      const result = await post({ op: currentlyArchived ? 'unarchive' : 'archive', sessionId, id })
+      if (!result.ok) {
+        dispatch({ type: 'setArchived', id, value: currentlyArchived })
+        dispatch({ type: 'message', text: result.error || '操作失败' })
+      }
     }
 
-    /** One entry: the title owns the first line, everything else the second. */
+    function onWriteClick() {
+      if (model.canSave) {
+        void onSave(state.selected)
+        return
+      }
+      if (state.selected.length === 0) dispatch({ type: 'flash', rows: true })
+      if (!state.collectionId) dispatch({ type: 'flash', collection: true })
+    }
+
     function renderItem(ref) {
       const selected = state.selected.includes(ref.id)
       const expanded = state.previewId === ref.id
@@ -122,32 +135,53 @@ export function createApply(React) {
         role: 'button',
         tabIndex: 0,
         'aria-pressed': selected,
-        title: selected ? '点击取消选择' : '点击选择这一条',
-        onClick: () => dispatch({ type: 'toggle', id: ref.id }),
+        'aria-expanded': expanded,
+        style: ref.archived ? { opacity: 0.55 } : undefined,
+        onClick: () => dispatch({ type: 'preview', id: ref.id }),
         onKeyDown: event => {
           if (event.key !== 'Enter' && event.key !== ' ') return
           event.preventDefault()
-          dispatch({ type: 'toggle', id: ref.id })
+          dispatch({ type: 'preview', id: ref.id })
         },
       },
-        h('div', { className: 'zr-title' }, ref.title || '(没有题名)'),
+        h('div', { className: 'zr-line1' },
+          h('input', {
+            type: 'checkbox',
+            className: 'zr-check',
+            'aria-label': `勾选 ${ref.title || '这条文献'}`,
+            checked: selected,
+            onClick: event => event.stopPropagation(),
+            onChange: () => dispatch({ type: 'toggle', id: ref.id }),
+          }),
+          h('div', { className: 'zr-title' }, ref.title || '(没有题名)'),
+        ),
         h('div', { className: 'zr-meta' },
           meta.length > 0 ? h('span', { className: 'zr-metaText' }, meta.join(' · ')) : null,
-          ref.inLibrary ? h(Chip, { tone: 'muted' }, '已在库') : null,
-          ref.hasPdf ? h(Chip, { tone: 'muted' }, '有 PDF') : null,
-          ref.proposal ? h(Chip, { tone: 'business' }, '待确认题录') : null,
+          h(Badge, {
+            rest: ref.inLibrary ? '已在库' : '未入库',
+            hover: '加入库',
+            tone: ref.inLibrary ? 'muted' : undefined,
+            onClick: ref.inLibrary ? undefined : (() => { void onAddToLibrary(ref.id) }),
+          }),
+          h(Badge, {
+            rest: ref.hasPdf ? '已有PDF' : '暂无PDF',
+            hover: '查找PDF',
+            tone: ref.hasPdf ? 'muted' : undefined,
+            onClick: ref.hasPdf ? undefined : (() => { void onFindPdf([ref.id]) }),
+            disabled: busy,
+          }),
+          h(Badge, {
+            rest: ref.resolved ? '已有元信息' : (ref.proposal ? '待确认题录' : '暂无元信息'),
+            hover: '查找元信息',
+            tone: ref.proposal ? 'business' : (ref.resolved ? 'muted' : undefined),
+            onClick: (ref.resolved || ref.proposal || !ref.canPropose) ? undefined : (() => { void onPropose(ref.id) }),
+          }),
           h('span', { className: 'zr-actions' },
             h(IconButton, {
-              title: busy ? '正在找 PDF…' : '找可下载的 PDF',
-              disabled: busy,
-              onClick: () => { void onFindPdf([ref.id]) },
-            }, h(Glyph, { path: GLYPH.download })),
-            h(IconButton, { title: '忽略这一条（不动 Zotero）', danger: true, onClick: () => { void onForget(ref.id) } },
-              h(Glyph, { path: GLYPH.close })),
-            h(IconButton, {
-              title: expanded ? '收起预览' : '展开预览',
-              onClick: () => dispatch({ type: 'preview', id: ref.id }),
-            }, h(Glyph, { path: GLYPH.chevron })),
+              title: ref.archived ? '取消归档' : '归档（隐藏这一条）',
+              active: ref.archived,
+              onClick: () => { void onToggleArchived(ref.id, Boolean(ref.archived)) },
+            }, h(Glyph, { paths: ref.archived ? GLYPH.restore : GLYPH.archive })),
           ),
         ),
         expanded ? renderPreview(ref) : null,
@@ -181,11 +215,7 @@ export function createApply(React) {
               h('button', { type: 'button', className: 'zr-button', onClick: event => { event.stopPropagation(); void onConfirm(ref.id, false) } }, '忽略'),
             ),
           )
-          : ref.canPropose
-            ? h('div', { className: 'zr-inlineActions' },
-              h('button', { type: 'button', className: 'zr-button', onClick: event => { event.stopPropagation(); void onPropose(ref.id) } }, '让模型补题录'),
-            )
-            : null,
+          : null,
       )
     }
 
@@ -203,44 +233,67 @@ export function createApply(React) {
           className: 'zr-button',
           onClick: () => dispatch({ type: 'selectAll' }),
         }, model.allSelected ? '取消全选' : '全选'),
+        h(IconButton, {
+          title: state.showArchived ? '隐藏已归档' : '显示已归档',
+          active: state.showArchived,
+          onClick: () => dispatch({ type: 'toggleArchived' }),
+        }, h(Glyph, { paths: GLYPH.eye })),
       ),
       h('div', { className: 'zr-scroll' },
         h('div', { className: 'zr-band' },
-          h('span', { className: 'zr-bandLabel' }, '参考文献'),
+          h('select', {
+            className: 'zr-control',
+            'aria-label': '排序',
+            value: state.sortKey,
+            onChange: event => dispatch({ type: 'sort', key: event.target.value }),
+          },
+            h('option', { value: 'title' }, '按标题'),
+            h('option', { value: 'authors' }, '按作者'),
+            h('option', { value: 'year' }, '按年份'),
+          ),
+          h(IconButton, {
+            title: state.sortAsc ? '升序（点击切换为降序）' : '降序（点击切换为升序）',
+            onClick: () => dispatch({ type: 'order' }),
+          }, h(Glyph, { paths: state.sortAsc ? GLYPH.arrowUp : GLYPH.arrowDown })),
           h('span', { className: 'zr-bandCount' }, `${model.rows.length}/${state.refs.length}`),
           state.selected.length > 0
             ? h('span', { className: 'zr-bandAction' },
               h(IconButton, {
                 title: `为选中的 ${state.selected.length} 条找 PDF`,
                 onClick: () => { void onFindPdf(state.selected) },
-              }, h(Glyph, { path: GLYPH.download })),
+              }, h(Glyph, { paths: GLYPH.download })),
             )
             : null,
         ),
         model.rows.length === 0
           ? h('div', { className: 'zr-empty' }, state.refs.length === 0 ? '这一会话还没有读到文献' : '没有匹配的行')
-          : h('div', { className: 'zr-list' }, model.rows.map(renderItem)),
+          : h('div', {
+            className: state.flash.rows ? 'zr-list zr-flash' : 'zr-list',
+            key: `rows-${state.flash.rows}`,
+          }, model.rows.map(renderItem)),
       ),
       state.notice ? h('div', { className: 'zr-notice', 'data-tone': 'error' }, state.notice) : null,
       state.message ? h('div', { className: 'zr-notice' }, state.message) : null,
       h('div', { className: 'zr-foot' },
         h('div', { className: 'zr-footRow' },
           h('select', {
-            className: 'zr-select',
+            className: state.flash.collection ? 'zr-select zr-flash' : 'zr-select',
+            key: `coll-${state.flash.collection}`,
             'aria-label': '分类',
             value: state.collectionId,
             onChange: event => dispatch({ type: 'collection', id: event.target.value }),
           },
             h('option', { value: '' }, '选择已有分类'),
             ...state.collections.map(collection => h('option', { key: collection.id, value: collection.id },
-              `${'·'.repeat(collection.level)} ${collection.name}`,
+              collection.path || collection.name,
             )),
           ),
           h('button', {
             type: 'button',
             className: 'zr-primary',
-            disabled: !model.canSave,
-            onClick: () => { void onSave() },
+            'data-disabled': model.canSave ? 'false' : 'true',
+            'aria-disabled': !model.canSave,
+            onClick: onWriteClick,
           }, state.saving ? '写入中…' : '写入 Zotero'),
         ),
         model.saveHint ? h('div', { className: 'zr-hint' }, model.saveHint) : null,
@@ -267,10 +320,6 @@ export function createApply(React) {
   }
 }
 
-/**
- * Keep the second line short: first author plus 等 when there are more.
- * @param {unknown} authors
- */
 function shortAuthors(authors) {
   const text = typeof authors === 'string' ? authors.trim() : ''
   if (!text) return ''

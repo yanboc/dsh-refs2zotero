@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { collectionStorageKey, initialState, reduce, viewModel } from '../src/view.js'
+import { collectionStorageKey, initialState, reduce, sortRefs, viewModel, visibleRows } from '../src/view.js'
 
 const papers = [
   { id: 'a', title: 'Attention', authors: 'Vaswani', doi: '10.1000/a', url: 'https://example.test/a', year: '2017', hasPdf: true, inLibrary: false },
@@ -67,18 +67,47 @@ test('a failed poll keeps the list and the collection choices', () => {
   assert.equal(after.notice, 'Zotero 没有在运行')
 })
 
-test('a forgotten row leaves the list, the selection, and the preview', () => {
-  const state = reduce(
-    { ...initialState(), refs: [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }], selected: ['a', 'b'], previewId: 'a' },
-    { type: 'remove', id: 'a' },
-  )
-  assert.deepEqual(state.refs.map(ref => ref.id), ['b'])
-  assert.deepEqual(state.selected, ['b'])
-  assert.equal(state.previewId, null)
-})
-
 test('the rows being searched for a pdf are tracked', () => {
   const state = reduce(initialState(), { type: 'fetching', ids: ['a'] })
   assert.deepEqual(state.fetching, ['a'])
   assert.deepEqual(reduce(state, { type: 'fetching', ids: [] }).fetching, [])
+})
+
+test('rows sort by title, authors, or year, ascending or descending', () => {
+  const refs = [
+    { id: 'a', title: 'Beta', authors: 'Zeta', year: '2019' },
+    { id: 'b', title: 'Alpha', authors: 'Alpha', year: '2021' },
+    { id: 'c', title: 'Gamma', authors: 'Beta', year: '' },
+  ]
+  assert.deepEqual(sortRefs(refs, 'title', true).map(ref => ref.id), ['b', 'a', 'c'])
+  assert.deepEqual(sortRefs(refs, 'title', false).map(ref => ref.id), ['c', 'a', 'b'])
+  assert.deepEqual(sortRefs(refs, 'authors', true).map(ref => ref.id), ['b', 'c', 'a'])
+  // Missing year sorts last ascending, first descending.
+  assert.deepEqual(sortRefs(refs, 'year', true).map(ref => ref.id), ['a', 'b', 'c'])
+  assert.deepEqual(sortRefs(refs, 'year', false).map(ref => ref.id), ['b', 'a', 'c'])
+})
+
+test('archived rows are hidden until the eye is on', () => {
+  const refs = [
+    { id: 'a', title: 'A', archived: false },
+    { id: 'b', title: 'B', archived: true },
+  ]
+  assert.deepEqual(visibleRows({ ...initialState(), refs }).map(ref => ref.id), ['a'])
+  assert.deepEqual(visibleRows({ ...initialState(), refs, showArchived: true }).map(ref => ref.id), ['a', 'b'])
+  assert.equal(viewModel({ ...initialState(), refs }).archivedCount, 1)
+})
+
+test('setArchived and toggleArchived flip their flags', () => {
+  let state = reduce({ ...initialState(), refs: [{ id: 'a', title: 'A', archived: false }] }, { type: 'setArchived', id: 'a', value: true })
+  assert.equal(state.refs[0].archived, true)
+  state = reduce(state, { type: 'toggleArchived' })
+  assert.equal(state.showArchived, true)
+})
+
+test('flash increments the part that is missing', () => {
+  let state = initialState()
+  state = reduce(state, { type: 'flash', collection: true })
+  assert.deepEqual(state.flash, { collection: 1, rows: 0 })
+  state = reduce(state, { type: 'flash', rows: true })
+  assert.deepEqual(state.flash, { collection: 1, rows: 1 })
 })

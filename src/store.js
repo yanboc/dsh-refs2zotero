@@ -62,10 +62,6 @@ export function createStore() {
       rows.set(id, next)
       return next
     },
-    /** Forget one row in this session's list. Zotero is not touched. */
-    forget(sessionId, id) {
-      sessions.get(sessionId)?.delete(id)
-    },
     /** Record a PDF the host fetched for a row, so a later write attaches it. */
     attach(sessionId, id, pdf) {
       const rows = sessions.get(sessionId)
