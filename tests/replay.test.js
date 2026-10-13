@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createPending } from '../src/ingest.js'
+import { createIgnoredStore } from '../src/ignored.js'
 import { createReplay } from '../src/replay.js'
 import { createStore } from '../src/store.js'
 
@@ -90,4 +91,26 @@ test('replaying the same session twice keeps one row', () => {
   replay.one(session)
   replay.one(session)
   assert.equal(store.list('s1').length, 1)
+})
+
+test('an ignored row is not restored by a later replay', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const dir = await mkdtemp(join(tmpdir(), 'zotero-refs-replay-'))
+  try {
+    const session = sessionWithLog('s1', 'https://arxiv.org/abs/1706.03762', 'Attention')
+    const ignored = createIgnoredStore({ dir })
+    const store = createStore()
+    createReplay({ store, pending: createPending(), ignored }).one(session)
+    assert.equal(store.list('s1').length, 1)
+
+    ignored.add('s1', store.list('s1')[0].id)
+    // A reload rebuilds from the log: the decision has to survive it.
+    const reloaded = createStore()
+    createReplay({ store: reloaded, pending: createPending(), ignored }).one(session)
+    assert.deepEqual(reloaded.list('s1'), [])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

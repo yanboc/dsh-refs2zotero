@@ -8,10 +8,10 @@ import { seedSession } from './ingest.js'
  * log is the durable record of what it read, so the list is derived from it
  * rather than from whatever happened to arrive after this instance started.
  *
- * @param {{ store: { list: (id: string) => any[] }, pending: Map<string, unknown>, enricher?: { resolve: (sessionId: string, ref: any) => Promise<void> } }} deps
+ * @param {{ store: { list: (id: string) => any[], forget: (sessionId: string, id: string) => void }, pending: Map<string, unknown>, enricher?: { resolve: (sessionId: string, ref: any) => Promise<void> }, ignored?: { has: (sessionId: string, id: string) => boolean } }} deps
  */
 export function createReplay(deps) {
-  const { store, pending, enricher } = deps
+  const { store, pending, enricher, ignored } = deps
 
   return {
     /**
@@ -30,11 +30,20 @@ export function createReplay(deps) {
         return []
       }
       const sessionId = String(session.id)
+      // A row the user ignored stays gone: the log still has it, so the replay
+      // is the only place that can honour the decision across mounts.
+      const kept = ignored
+        ? restored.filter(ref => {
+            if (!ignored.has(sessionId, ref.id)) return true
+            store.forget(sessionId, ref.id)
+            return false
+          })
+        : restored
       // Fill the canonical records in one at a time: a long session should not
       // fire every identifier lookup at doi.org simultaneously.
-      if (restored.length > 0 && enricher) {
+      if (kept.length > 0 && enricher) {
         void (async () => {
-          for (const ref of restored) {
+          for (const ref of kept) {
             try {
               if (ref.doi || ref.arxiv) await enricher.resolve(sessionId, ref)
             } catch {
@@ -44,7 +53,7 @@ export function createReplay(deps) {
           }
         })()
       }
-      return restored
+      return kept
     },
 
     /**

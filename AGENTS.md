@@ -22,6 +22,7 @@ DeepSeek Harness 插件。把当前会话里读到的文献写入本机 Zotero �
 - 宿主半能拿到 `ctx.get('llm')`（`stream(options)`，接受普通 `{role, content, source}` 消息对象）和 `ctx.get('tools')`（`register(definition)`，JSON Schema 只支持 type/oneOf/properties/required/additionalProperties/items/enum/const + 注解，`minimum` 之类会抛）。插件不必 import harness 包。
 - harness 自己读不了 PDF（`web_fetch` 拒绝 `application/pdf`，`read` 拒绝二进制）。插件用 Mozilla 的 `pdfjs-dist` 自己注册了 `read_pdf` 工具；依赖装在包内，宿主半按需动态 import。
 - 查重要 Zotero 的本地 API（设置 → 高级 → 允许其他应用与本机 Zotero 通信），默认关闭时返回 403；关闭时按 warning 降级、照常写入。查重必须带 `qmode=everything`，否则 DOI 查不中。
+- 客户端半的样式：只用 `--dsw-alias-*` / `--dsw-font-*` 设计令牌，尺寸照 better-sidebar 的 changes 页（头部带 36px、控件 28px、chip 22px、圆角 ≤4px）。原子组件与样式表在 `src/ui.js`（注入一张 `<style>`，class 前缀 `zr-`）。条目是**两行**：题名一行、元信息一行。忽略集合要**同步**读盘（`src/ignored.js`），因为重放是同步的。
 - 纯文本 `read` 的收集要有防线：先剥掉 `read` 的 `<path>/<content>` 信封，只把文件**开头 12 行**当记录找字段标签，标识只在开头 2000 字里找。否则代理读自己的源码/测试文件（里面写着 `title:`、DOI 之类的 fixture）会被当成文献，甚至合并进真正的那一行、把它的 DOI 覆盖掉。
 - 列表只在插件实例内存里，所以挂载时会用 `ctx.get('sessions').list()` 的每个会话日志重放收集（`src/replay.js` + `seedSession`）。改动收集条件后，这条重放路径与实时路径共用代码，不要另写一套解析。
 - 测试先行：新行为先写会失败的 `node --test`，再改实现。现有断言不改弱。

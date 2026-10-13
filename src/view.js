@@ -12,6 +12,7 @@ export function initialState() {
     message: '',
     notice: '',
     saving: false,
+    fetching: [],
   }
 }
 
@@ -63,6 +64,15 @@ export function reduce(state, action) {
     return { ...state, previewId: state.previewId === action.id ? null : action.id }
   }
   if (action.type === 'collection') return { ...state, collectionId: action.id ?? '' }
+  if (action.type === 'fetching') return { ...state, fetching: action.ids ?? [] }
+  if (action.type === 'remove') {
+    return {
+      ...state,
+      refs: state.refs.filter(ref => ref.id !== action.id),
+      selected: state.selected.filter(id => id !== action.id),
+      previewId: state.previewId === action.id ? null : state.previewId,
+    }
+  }
   if (action.type === 'message') return { ...state, message: action.text ?? '' }
   if (action.type === 'saving') return { ...state, saving: Boolean(action.value) }
   return state

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { createServer } from 'node:http'
 import test from 'node:test'
 import { handleApiRequest, handleHttp } from '../src/api.js'
@@ -173,4 +176,83 @@ test('http handler only accepts post json', async () => {
       })
     })
   }
+})
+
+test('forget removes the row and records the decision', async () => {
+  const store = createStore()
+  store.upsert('s1', ref)
+  const added = []
+  const result = await handleApiRequest({ op: 'forget', sessionId: 's1', id: ref.id }, {
+    store,
+    ignored: { add: (sessionId, id) => added.push(`${sessionId}:${id}`) },
+    zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
+  })
+  assert.equal(result.ok, true)
+  assert.deepEqual(store.list('s1'), [])
+  assert.deepEqual(added, [`s1:${ref.id}`])
+  assert.equal((await handleApiRequest({ op: 'forget', sessionId: 's1' }, { store })).ok, false)
+})
+
+test('fetchPdf downloads a found pdf and attaches it to the row', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'zotero-refs-fetch-'))
+  try {
+    const store = createStore()
+    store.upsert('s1', { ...ref, id: 'arxiv:1706.03762', doi: '', arxiv: '1706.03762', url: 'https://arxiv.org/abs/1706.03762', pdfUrl: '', pdfPath: '' })
+    const pdf = Buffer.from('%PDF-1.4 fetched')
+    const result = await handleApiRequest({ op: 'fetchPdf', sessionId: 's1', ids: ['arxiv:1706.03762'] }, {
+      store,
+      pdfDir: dir,
+      fetch: async url => {
+        assert.equal(String(url), 'https://arxiv.org/pdf/1706.03762.pdf')
+        return { ok: true, arrayBuffer: async () => pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) }
+      },
+      zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
+    })
+    assert.equal(result.ok, true)
+    assert.equal(result.results[0].ok, true)
+    assert.equal(result.results[0].bytes, pdf.byteLength)
+    const row = store.list('s1')[0]
+    assert.match(row.pdfPath, /zotero-refs-fetch-.*\.pdf$/)
+    assert.equal(row.pdfUrl, 'https://arxiv.org/pdf/1706.03762.pdf')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('fetchPdf falls back to an open-access copy for a plain doi', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'zotero-refs-oa-'))
+  try {
+    const store = createStore()
+    store.upsert('s1', { ...ref, id: 'doi:10.1371/journal.pone.0297598', doi: '10.1371/journal.pone.0297598', url: 'https://journals.plos.org/x', pdfUrl: '', pdfPath: '' })
+    const pdf = Buffer.from('%PDF-1.7 oa')
+    const result = await handleApiRequest({ op: 'fetchPdf', sessionId: 's1', ids: ['doi:10.1371/journal.pone.0297598'] }, {
+      store,
+      pdfDir: dir,
+      fetch: async url => {
+        if (String(url).startsWith('https://api.openalex.org/')) {
+          return { ok: true, json: async () => ({ best_oa_location: { pdf_url: 'https://cdn.example/paper.pdf' } }) }
+        }
+        assert.equal(String(url), 'https://cdn.example/paper.pdf')
+        return { ok: true, arrayBuffer: async () => pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) }
+      },
+      zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
+    })
+    assert.equal(result.results[0].ok, true)
+    assert.equal(store.list('s1')[0].pdfPath.length > 0, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('fetchPdf reports a row it cannot help', async () => {
+  const store = createStore()
+  store.upsert('s1', { ...ref, id: 'doi:10.1000/closed', doi: '10.1000/closed', url: '', pdfUrl: '', pdfPath: '' })
+  const result = await handleApiRequest({ op: 'fetchPdf', sessionId: 's1', ids: ['doi:10.1000/closed'] }, {
+    store,
+    fetch: async () => ({ ok: false, status: 404, json: async () => ({}) }),
+    zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.results[0].ok, false)
+  assert.match(result.results[0].error, /没找到可下载的 PDF/)
 })

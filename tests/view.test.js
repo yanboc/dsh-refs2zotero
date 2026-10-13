@@ -66,3 +66,19 @@ test('a failed poll keeps the list and the collection choices', () => {
   assert.deepEqual(after.collections, collections)
   assert.equal(after.notice, 'Zotero 没有在运行')
 })
+
+test('a forgotten row leaves the list, the selection, and the preview', () => {
+  const state = reduce(
+    { ...initialState(), refs: [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }], selected: ['a', 'b'], previewId: 'a' },
+    { type: 'remove', id: 'a' },
+  )
+  assert.deepEqual(state.refs.map(ref => ref.id), ['b'])
+  assert.deepEqual(state.selected, ['b'])
+  assert.equal(state.previewId, null)
+})
+
+test('the rows being searched for a pdf are tracked', () => {
+  const state = reduce(initialState(), { type: 'fetching', ids: ['a'] })
+  assert.deepEqual(state.fetching, ['a'])
+  assert.deepEqual(reduce(state, { type: 'fetching', ids: [] }).fetching, [])
+})

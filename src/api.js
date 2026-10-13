@@ -1,8 +1,10 @@
 import { discoverPdfUrl } from './zotero.js'
+import { findOpenAccessPdfs } from './oa.js'
+import { loadPdfSource } from './pdf.js'
 
 /**
  * @param {Record<string, unknown>} body
- * @param {{ store: { list: (id: string) => any[] }, zotero: { collections: () => Promise<any[]>, findByDoi: (doi: string) => Promise<boolean>, save: (refs: any[], collectionId: string) => Promise<any> }, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> } }} deps
+ * @param {{ store: { list: (id: string) => any[], forget: (sessionId: string, id: string) => void, attach: (sessionId: string, id: string, pdf: Record<string, unknown>) => unknown }, zotero: { collections: () => Promise<any[]>, findByDoi: (doi: string) => Promise<boolean>, save: (refs: any[], collectionId: string) => Promise<any> }, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> }, ignored?: { add: (sessionId: string, id: string) => void }, fetch?: typeof fetch, pdfDir?: string }} deps
  */
 export async function handleApiRequest(body, deps) {
   if (!body || typeof body !== 'object') return { ok: false, error: '请求不是 JSON 对象' }
@@ -57,6 +59,56 @@ export async function handleApiRequest(body, deps) {
     if (!row) return { ok: false, error: '这一行不在了' }
     return { ok: true, accepted }
   }
+  if (body.op === 'forget') {
+    if (typeof body.sessionId !== 'string' || typeof body.id !== 'string') {
+      return { ok: false, error: '忽略需要 sessionId 和 id' }
+    }
+    deps.store.forget(body.sessionId, body.id)
+    deps.ignored?.add(body.sessionId, body.id)
+    return { ok: true }
+  }
+  if (body.op === 'fetchPdf') {
+    const ids = Array.isArray(body.ids) ? body.ids.filter(id => typeof id === 'string') : []
+    if (typeof body.sessionId !== 'string' || ids.length === 0) {
+      return { ok: false, error: '找 PDF 需要 sessionId 和 ids' }
+    }
+    const rows = deps.store.list(body.sessionId)
+    const results = []
+    for (const id of ids) {
+      const ref = rows.find(row => row.id === id)
+      if (!ref) {
+        results.push({ id, ok: false, error: '这一行不在了' })
+        continue
+      }
+      const candidates = []
+      if (ref.pdfUrl) candidates.push(ref.pdfUrl)
+      const discovered = discoverPdfUrl(ref)
+      if (discovered) candidates.push(discovered)
+      if (ref.doi) candidates.push(...await findOpenAccessPdfs(ref.doi, { fetch: deps.fetch }))
+      const urls = [...new Set(candidates.filter(url => typeof url === 'string' && url.length > 0))]
+      if (urls.length === 0) {
+        results.push({ id, ok: false, error: '没找到可下载的 PDF' })
+        continue
+      }
+      // A host can refuse one copy while another works (a publisher blocking the
+      // printable URL, a preprint host rate-limiting), so try them in order.
+      let failure = ''
+      let done = false
+      for (const url of urls) {
+        try {
+          const loaded = await loadPdfSource({ url }, { fetch: deps.fetch, dir: deps.pdfDir })
+          deps.store.attach(body.sessionId, id, { pdfPath: loaded.path, pdfUrl: loaded.url || url })
+          results.push({ id, ok: true, bytes: loaded.bytes.byteLength, url: loaded.url || url })
+          done = true
+          break
+        } catch (error) {
+          failure = error instanceof Error ? error.message : '下载失败'
+        }
+      }
+      if (!done) results.push({ id, ok: false, error: failure || '下载失败' })
+    }
+    return { ok: true, results }
+  }
   if (body.op === 'save') {
     if (typeof body.sessionId !== 'string' || !Array.isArray(body.ids) || typeof body.collectionId !== 'string' || body.collectionId.length === 0) {
       return { ok: false, error: '保存需要 sessionId、ids 和已有分类' }
@@ -77,7 +129,7 @@ export async function handleApiRequest(body, deps) {
 /**
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
- * @param {{ store: any, zotero: any, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> } }} deps
+ * @param {{ store: any, zotero: any, proposer?: any, ignored?: any, fetch?: typeof fetch, pdfDir?: string }} deps
  */
 export async function handleHttp(req, res, deps) {
   try {

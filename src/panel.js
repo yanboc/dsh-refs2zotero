@@ -1,10 +1,13 @@
 import { collectionStorageKey, initialState, reduce, viewModel } from './view.js'
+import { GLYPH, createAtoms, ensureStyle } from './ui.js'
 
 /**
  * @param {typeof import('react')} React
  */
 export function createApply(React) {
   const { createElement: h, useEffect, useReducer } = React
+  const { IconButton, Chip, Glyph } = createAtoms(React)
+  ensureStyle()
 
   function Panel({ sessionId, visible }) {
     const [state, dispatch] = useReducer(reduce, undefined, () => {
@@ -66,115 +69,183 @@ export function createApply(React) {
         dispatch({ type: 'message', text: result.error || '保存失败' })
         return
       }
-      const saved = result.saved?.length ?? 0
-      const skipped = result.skipped?.length ?? 0
-      const failed = result.failed ?? []
-      const warnings = result.warnings ?? []
-      const parts = [`已写入 ${saved} 条`]
-      if (skipped) parts.push(`已在库 ${skipped} 条`)
-      if (failed.length) parts.push(failed.map(item => item.reason).join('；'))
-      if (warnings.length) parts.push(warnings.map(item => item.reason).join('；'))
+      const parts = [`已写入 ${result.saved?.length ?? 0} 条`]
+      if (result.skipped?.length) parts.push(`已在库 ${result.skipped.length} 条`)
+      for (const item of result.failed ?? []) parts.push(item.reason)
+      for (const item of result.warnings ?? []) parts.push(item.reason)
       dispatch({ type: 'message', text: parts.join('，') })
     }
-
-    return h('div', { style: pageStyle },
-      h('div', { style: toolbarStyle },
-        h('input', {
-          'aria-label': '搜索',
-          placeholder: '搜索题名、作者、DOI',
-          value: state.query,
-          onChange: (event) => dispatch({ type: 'query', query: event.target.value }),
-          style: inputStyle,
-        }),
-        h('button', { type: 'button', onClick: () => dispatch({ type: 'selectAll' }) }, model.allSelected ? '取消全选' : '全选'),
-        h('select', {
-          'aria-label': '分类',
-          value: state.collectionId,
-          onChange: (event) => dispatch({ type: 'collection', id: event.target.value }),
-        },
-          h('option', { value: '' }, '选择已有分类'),
-          ...state.collections.map(collection => h('option', { key: collection.id, value: collection.id },
-            `${'·'.repeat(collection.level)} ${collection.name}`,
-          )),
-        ),
-        h('button', { type: 'button', disabled: !model.canSave, onClick: () => { void onSave() } }, '写入 Zotero'),
-        model.saveHint ? h('span', { style: hintStyle }, model.saveHint) : null,
-      ),
-      state.notice ? h('p', null, state.notice) : null,
-      state.message ? h('p', null, state.message) : null,
-      model.rows.length === 0
-        ? h('p', null, '还没有收集到文献')
-        : h('table', { style: { width: '100%', borderCollapse: 'collapse' } },
-          h('thead', null, h('tr', null, ['', '题名', '作者', '年份', '文件', '库'].map(label => h('th', { key: label, style: cellStyle }, label)))),
-          h('tbody', null, model.rows.map(ref => h('tr', { key: ref.id },
-            h('td', { style: cellStyle }, h('input', {
-              type: 'checkbox',
-              'aria-label': `选择 ${ref.title}`,
-              checked: state.selected.includes(ref.id),
-              onChange: () => dispatch({ type: 'toggle', id: ref.id }),
-            })),
-            h('td', { style: cellStyle }, h('button', { type: 'button', onClick: () => dispatch({ type: 'preview', id: ref.id }) }, ref.title)),
-            h('td', { style: cellStyle }, shortAuthors(ref.authors)),
-            h('td', { style: cellStyle }, ref.year || ''),
-            h('td', { style: cellStyle }, ref.hasPdf ? '有 PDF' : '仅链接'),
-            h('td', { style: cellStyle }, [
-              ref.inLibrary ? '已在库' : '',
-              ref.proposal ? '待确认题录' : '',
-            ].filter(Boolean).join(' ')),
-          ))),
-        ),
-      model.preview ? h('aside', { style: { marginTop: 12 } },
-        h('h2', { style: { fontSize: 16 } }, model.preview.title),
-        h('p', null, [model.preview.authors, model.preview.year].filter(Boolean).join(' · ')),
-        model.preview.publicationTitle
-          ? h('p', null, [model.preview.publicationTitle, model.preview.volume, model.preview.issue, model.preview.pages].filter(Boolean).join(' '))
-          : null,
-        model.preview.doi || model.preview.arxiv
-          ? h('p', null, model.preview.doi ? `DOI ${model.preview.doi}` : `arXiv ${model.preview.arxiv}`)
-          : null,
-        h('p', null, [
-          model.preview.hasPdf ? '有 PDF' : '没有 PDF',
-          model.preview.hasHtml ? '有网页快照' : '',
-          model.preview.inLibrary ? '已在库' : '',
-          model.preview.resolved ? '题录已按规范记录补全' : '',
-        ].filter(Boolean).join(' · ')),
-        model.preview.url ? h('p', null, model.preview.url) : null,
-        model.preview.abstract ? h('p', null, model.preview.abstract) : null,
-        model.preview.proposal
-          ? h('div', { style: proposalStyle },
-            h('strong', null, '模型建议的题录（还没采用）'),
-            h('p', null, model.preview.proposal.title || '(没有题名)'),
-            h('p', null, [
-              model.preview.proposal.authors,
-              model.preview.proposal.year,
-              model.preview.proposal.publicationTitle,
-              model.preview.proposal.doi,
-            ].filter(Boolean).join(' · ')),
-            h('button', { type: 'button', onClick: () => { void onConfirm(model.preview.id, true) } }, '采用'),
-            ' ',
-            h('button', { type: 'button', onClick: () => { void onConfirm(model.preview.id, false) } }, '忽略'),
-          )
-          : null,
-        !model.preview.proposal && model.preview.canPropose
-          ? h('button', { type: 'button', onClick: () => { void onPropose(model.preview.id) } }, '让模型补题录')
-          : null,
-      ) : null,
-    )
 
     async function onPropose(id) {
       dispatch({ type: 'message', text: '正在让模型读这一行…' })
       const result = await post({ op: 'propose', sessionId, id })
-      if (!result.ok) {
-        dispatch({ type: 'message', text: result.error || '模型补题录失败' })
-        return
-      }
-      dispatch({ type: 'message', text: '模型给出了建议，确认后才会写进条目' })
+      dispatch({ type: 'message', text: result.ok ? '模型给出了建议，采用后才会写进条目' : (result.error || '模型补题录失败') })
     }
 
     async function onConfirm(id, accept) {
       const result = await post({ op: 'confirm', sessionId, id, accept })
       dispatch({ type: 'message', text: result.ok ? (accept ? '已采用模型建议' : '已忽略模型建议') : (result.error || '操作失败') })
     }
+
+    async function onFindPdf(ids) {
+      if (ids.length === 0) return
+      dispatch({ type: 'fetching', ids })
+      dispatch({ type: 'message', text: '正在找可下载的 PDF…' })
+      const result = await post({ op: 'fetchPdf', sessionId, ids })
+      dispatch({ type: 'fetching', ids: [] })
+      if (!result.ok) {
+        dispatch({ type: 'message', text: result.error || '找 PDF 失败' })
+        return
+      }
+      const ok = (result.results ?? []).filter(item => item.ok)
+      const parts = [`找到 ${ok.length} 个 PDF`]
+      for (const item of (result.results ?? []).filter(item => !item.ok)) parts.push(item.error)
+      dispatch({ type: 'message', text: parts.join('，') })
+    }
+
+    async function onForget(id) {
+      dispatch({ type: 'remove', id })
+      const result = await post({ op: 'forget', sessionId, id })
+      if (!result.ok) dispatch({ type: 'message', text: result.error || '忽略失败' })
+    }
+
+    /** One entry: the title owns the first line, everything else the second. */
+    function renderItem(ref) {
+      const selected = state.selected.includes(ref.id)
+      const expanded = state.previewId === ref.id
+      const busy = state.fetching.includes(ref.id)
+      const meta = [shortAuthors(ref.authors), ref.year, ref.publicationTitle].filter(Boolean)
+      return h('div', {
+        key: ref.id,
+        className: 'zr-item',
+        'data-selected': selected ? 'true' : 'false',
+        role: 'button',
+        tabIndex: 0,
+        'aria-pressed': selected,
+        title: selected ? '点击取消选择' : '点击选择这一条',
+        onClick: () => dispatch({ type: 'toggle', id: ref.id }),
+        onKeyDown: event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          dispatch({ type: 'toggle', id: ref.id })
+        },
+      },
+        h('div', { className: 'zr-title' }, ref.title || '(没有题名)'),
+        h('div', { className: 'zr-meta' },
+          meta.length > 0 ? h('span', { className: 'zr-metaText' }, meta.join(' · ')) : null,
+          ref.inLibrary ? h(Chip, { tone: 'muted' }, '已在库') : null,
+          ref.hasPdf ? h(Chip, { tone: 'muted' }, '有 PDF') : null,
+          ref.proposal ? h(Chip, { tone: 'business' }, '待确认题录') : null,
+          h('span', { className: 'zr-actions' },
+            h(IconButton, {
+              title: busy ? '正在找 PDF…' : '找可下载的 PDF',
+              disabled: busy,
+              onClick: () => { void onFindPdf([ref.id]) },
+            }, h(Glyph, { path: GLYPH.download })),
+            h(IconButton, { title: '忽略这一条（不动 Zotero）', danger: true, onClick: () => { void onForget(ref.id) } },
+              h(Glyph, { path: GLYPH.close })),
+            h(IconButton, {
+              title: expanded ? '收起预览' : '展开预览',
+              onClick: () => dispatch({ type: 'preview', id: ref.id }),
+            }, h(Glyph, { path: GLYPH.chevron })),
+          ),
+        ),
+        expanded ? renderPreview(ref) : null,
+      )
+    }
+
+    function renderPreview(ref) {
+      const identifier = ref.doi ? `DOI ${ref.doi}` : (ref.arxiv ? `arXiv ${ref.arxiv}` : '')
+      const venue = [ref.publicationTitle, ref.volume, ref.issue, ref.pages].filter(Boolean).join(' ')
+      return h('div', { className: 'zr-preview' },
+        ref.authors ? h('div', { className: 'zr-line' }, ref.authors) : null,
+        venue ? h('div', { className: 'zr-line' }, venue) : null,
+        identifier ? h('div', { className: 'zr-line' }, identifier) : null,
+        ref.url ? h('div', { className: 'zr-line' }, ref.url) : null,
+        h('div', { className: 'zr-line' },
+          [
+            ref.hasPdf ? '有 PDF' : '没有 PDF',
+            ref.hasHtml ? '有网页快照' : '',
+            ref.inLibrary ? '已在库' : '',
+            ref.resolved ? '题录已按规范记录补全' : '',
+          ].filter(Boolean).join(' · ')),
+        ref.abstract ? h('div', { className: 'zr-abstract' }, ref.abstract) : null,
+        ref.proposal
+          ? h('div', { className: 'zr-proposal' },
+            h('div', { className: 'zr-proposalHead' }, '模型建议的题录（还没采用）'),
+            h('div', { className: 'zr-line' }, ref.proposal.title || '(没有题名)'),
+            h('div', { className: 'zr-line' },
+              [ref.proposal.authors, ref.proposal.year, ref.proposal.publicationTitle, ref.proposal.doi].filter(Boolean).join(' · ')),
+            h('div', { className: 'zr-inlineActions' },
+              h('button', { type: 'button', className: 'zr-button', onClick: event => { event.stopPropagation(); void onConfirm(ref.id, true) } }, '采用'),
+              h('button', { type: 'button', className: 'zr-button', onClick: event => { event.stopPropagation(); void onConfirm(ref.id, false) } }, '忽略'),
+            ),
+          )
+          : ref.canPropose
+            ? h('div', { className: 'zr-inlineActions' },
+              h('button', { type: 'button', className: 'zr-button', onClick: event => { event.stopPropagation(); void onPropose(ref.id) } }, '让模型补题录'),
+            )
+            : null,
+      )
+    }
+
+    return h('div', { className: 'zr-root' },
+      h('div', { className: 'zr-head' },
+        h('input', {
+          className: 'zr-search',
+          'aria-label': '搜索',
+          placeholder: '搜索题名、作者、DOI',
+          value: state.query,
+          onChange: event => dispatch({ type: 'query', query: event.target.value }),
+        }),
+        h('button', {
+          type: 'button',
+          className: 'zr-button',
+          onClick: () => dispatch({ type: 'selectAll' }),
+        }, model.allSelected ? '取消全选' : '全选'),
+      ),
+      h('div', { className: 'zr-scroll' },
+        h('div', { className: 'zr-band' },
+          h('span', { className: 'zr-bandLabel' }, '参考文献'),
+          h('span', { className: 'zr-bandCount' }, `${model.rows.length}/${state.refs.length}`),
+          state.selected.length > 0
+            ? h('span', { className: 'zr-bandAction' },
+              h(IconButton, {
+                title: `为选中的 ${state.selected.length} 条找 PDF`,
+                onClick: () => { void onFindPdf(state.selected) },
+              }, h(Glyph, { path: GLYPH.download })),
+            )
+            : null,
+        ),
+        model.rows.length === 0
+          ? h('div', { className: 'zr-empty' }, state.refs.length === 0 ? '这一会话还没有读到文献' : '没有匹配的行')
+          : h('div', { className: 'zr-list' }, model.rows.map(renderItem)),
+      ),
+      state.notice ? h('div', { className: 'zr-notice', 'data-tone': 'error' }, state.notice) : null,
+      state.message ? h('div', { className: 'zr-notice' }, state.message) : null,
+      h('div', { className: 'zr-foot' },
+        h('div', { className: 'zr-footRow' },
+          h('select', {
+            className: 'zr-select',
+            'aria-label': '分类',
+            value: state.collectionId,
+            onChange: event => dispatch({ type: 'collection', id: event.target.value }),
+          },
+            h('option', { value: '' }, '选择已有分类'),
+            ...state.collections.map(collection => h('option', { key: collection.id, value: collection.id },
+              `${'·'.repeat(collection.level)} ${collection.name}`,
+            )),
+          ),
+          h('button', {
+            type: 'button',
+            className: 'zr-primary',
+            disabled: !model.canSave,
+            onClick: () => { void onSave() },
+          }, state.saving ? '写入中…' : '写入 Zotero'),
+        ),
+        model.saveHint ? h('div', { className: 'zr-hint' }, model.saveHint) : null,
+      ),
+    )
   }
 
   return {
@@ -186,9 +257,9 @@ export function createApply(React) {
         title: () => '参考文献',
         order: 60,
         single: true,
-        icon: (size) => h('svg', { width: size, height: size, viewBox: '0 0 16 16', 'aria-hidden': true },
-          h('rect', { x: 3, y: 2, width: 10, height: 12, rx: 1, fill: 'none', stroke: 'currentColor' }),
-          h('path', { d: 'M6 2v12', stroke: 'currentColor' }),
+        icon: (size) => h('svg', { width: size, height: size, viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.4 },
+          h('rect', { x: 3, y: 2, width: 10, height: 12, rx: 1 }),
+          h('path', { d: 'M6 2v12' }),
         ),
         component: ({ scope, visible }) => h(Panel, { sessionId: scope.sessionId, visible }),
       }))
@@ -197,7 +268,7 @@ export function createApply(React) {
 }
 
 /**
- * Keep the list column narrow: first author plus 等 when there are more.
+ * Keep the second line short: first author plus 等 when there are more.
  * @param {unknown} authors
  */
 function shortAuthors(authors) {
@@ -219,10 +290,3 @@ async function post(body) {
     return { ok: false, error: error instanceof Error ? error.message : '请求失败' }
   }
 }
-
-const pageStyle = { padding: 12, font: '13px/1.4 sans-serif', color: 'inherit' }
-const toolbarStyle = { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }
-const inputStyle = { flex: '1 1 160px' }
-const cellStyle = { textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #ddd', verticalAlign: 'top' }
-const proposalStyle = { marginTop: 8, padding: 8, border: '1px dashed #b58', borderRadius: 4 }
-const hintStyle = { alignSelf: 'center', opacity: 0.7 }

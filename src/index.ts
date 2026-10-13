@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { handleHttp } from './api.js'
 import { createEnricher } from './enrich.js'
+import { createIgnoredStore } from './ignored.js'
 import { createPending, onSessionEvent } from './ingest.js'
 import { createReplay } from './replay.js'
 import { extractPdfText, loadPdfSource, DEFAULT_MAX_CHARS, DEFAULT_MAX_PAGES } from './pdf.js'
@@ -144,7 +145,8 @@ export function apply(ctx: Context): void {
   const llm = resolve<LlmService>('llm')
   const sessions = resolve<SessionsService>('sessions')
   const proposer = createProposer({ stream: llm ? options => llm.stream(options) : undefined })
-  const replay = createReplay({ store, pending, enricher })
+  const ignored = createIgnoredStore()
+  const replay = createReplay({ store, pending, enricher, ignored })
 
   if (tools) {
     // Registered as an effect so unloading this plugin also unregisters the
@@ -185,7 +187,7 @@ export function apply(ctx: Context): void {
     kind: 'exact',
     path: '/dsh-refs2zotero/api',
     handler: (req, res) => {
-      void handleHttp(req, res, { store, zotero, proposer })
+      void handleHttp(req, res, { store, zotero, proposer, ignored })
     },
   }))
   // Sessions that already exist when this plugin mounts (or remounts) get their

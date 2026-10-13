@@ -50,6 +50,21 @@ harness 自己的两条路读不了 PDF（`web_fetch` 遇到 `application/pdf` �
 
 浏览器只 `fetch` 本插件在 DSH web 服务器上的路由，例如 `/dsh-refs2zotero/api`。宿主用 `ctx.webServer.register` 挂 exact 路由，`inject` 含 `webServer`。这个插件只给 Web profile。
 
+### 外观
+
+页面要和 better-sidebar 里其他页像同一个东西，所以：
+
+- 样式只用设计令牌（`--dsw-alias-*`、`--dsw-font-*`），尺寸照 changes 页量：头部带 36px、控件 28px、chip 22px、圆角 2/3/4px。源码见 `src/ui.js`（注入一张样式表，class 前缀 `zr-`）。
+- **一条文献占两行**：第一行题名（过长换行，不截断），第二行作者·年份·期刊 + 状态 chip（已在库 / 有 PDF / 待确认题录）+ 右侧动作。
+- 行内动作默认不可见，`:hover` / `:focus-within` 才显形；触摸设备常显。动作是：找 PDF、忽略、展开预览。
+- 选中态是激活底色 + 左侧 2px 强调竖条（照抄 changes 页的配方）。
+- 分类选择和「写入 Zotero」固定在底部条；按钮不可点时写明原因。
+- 列表与分类每 2 秒轮询一次；轮询失败保留上一次的数据，只更新提示文字。
+
+### 忽略一条
+
+「忽略」把该行从本会话列表移出（不动 Zotero），并把决定按会话写到 `<tmp>/dsh-refs2zotero/ignored-<session>.json`。列表在挂载时由会话日志重放，所以这个记录必须落盘并且**同步**读——重放是同步跑的，要在这之前知道跳过谁。
+
 ## 写入
 
 基址是桌面端 Zotero 的 connector 端口。请求带 `X-Zotero-Connector-API-Version: 3`。以 Zotero 源码 `server_connector.js` 和 `saveSession.js` 为准。
@@ -61,7 +76,7 @@ harness 自己的两条路读不了 PDF（`web_fetch` 遇到 `application/pdf` �
 3. 题录：DOI 用 `https://doi.org/{doi}`，`Accept: application/vnd.citationstyles.csl+json`。映射 `itemType`、`title`、`creators`、`date`、`DOI`、`url`、`abstractNote`、`publicationTitle`、`volume`、`issue`、`pages`。arXiv 用 arXiv API。条目 `id` 用这一行的稳定 id。
 4. `POST /connector/saveItems`，body 含 `sessionID` 和 `items`。
 5. `POST /connector/updateSession`，body 含 `sessionID` 和 `target`（分类树 id，形如 `C1`）。不要传 `note`。
-6. 有 PDF 时 `POST /connector/saveAttachment`。`X-Metadata` 里是 `sessionID`、`parentItemID`、`title`、`url`；正文是文件字节。本地路径（`read_pdf` 的缓存文件、`read` 到的 `.pdf`）直接读；没有本地文件时宿主自己找 PDF：`pdfUrl`、arXiv id（含 `10.48550/arXiv.…` 形式的 DOI）、页面里 `citation_pdf_url` 或 `.pdf` 链接。只下载 http(s)，不要下载回环地址。限制 20MB 并校验 `%PDF-`。手里有 HTML 时，用 connector 的单文件快照接口留下网页。
+6. 有 PDF 时 `POST /connector/saveAttachment`。PDF 可以来自侧边栏的「找 PDF」：宿主按顺序试「这一行已有的 `pdfUrl` → 由 arXiv id 推出的 arXiv PDF → 页面里的 PDF 链接 → 按 DOI 问 OpenAlex 的开放获取副本」，同一个 DOI 的正式版优先于预印本，某个地址失败就试下一个，成功后缓存到本地并写回这一行。`X-Metadata` 里是 `sessionID`、`parentItemID`、`title`、`url`；正文是文件字节。本地路径（`read_pdf` 的缓存文件、`read` 到的 `.pdf`）直接读；没有本地文件时宿主自己找 PDF：`pdfUrl`、arXiv id（含 `10.48550/arXiv.…` 形式的 DOI）、页面里 `citation_pdf_url` 或 `.pdf` 链接。只下载 http(s)，不要下载回环地址。限制 20MB 并校验 `%PDF-`。手里有 HTML 时，用 connector 的单文件快照接口留下网页。
 
 分类列表来自 `POST /connector/getSelectedCollection` 的 `targets`。只展示已有项。
 
