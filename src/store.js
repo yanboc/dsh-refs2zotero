@@ -111,6 +111,7 @@ function mergeRef(prev, next) {
     proposed: next.proposed ?? prev.proposed,
     proposalState: prefer(next.proposalState, prev.proposalState),
     kind: next.kind === 'pdf' || prev.kind === 'pdf' ? 'pdf' : 'page',
+    why: prefer(prev.why, next.why),
   }
 }
 

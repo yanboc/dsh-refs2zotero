@@ -185,6 +185,7 @@ function publicRef(ref, inLibrary, archived) {
     proposalState: ref.proposalState ?? '',
     inLibrary,
     archived: Boolean(archived),
+    why: ref.why || '',
   }
 }
 

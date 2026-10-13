@@ -230,6 +230,7 @@ export function createApply(React) {
         ref.url ? Field('链接', ref.url) : null,
         status ? Field('状态', status) : null,
         ref.abstract ? h(AbstractBlock, { text: ref.abstract }) : null,
+        ref.why ? Field('备注', ref.why) : null,
         ref.proposal
           ? h('div', { className: 'zr-proposal' },
             h('div', { className: 'zr-proposalHead' }, '模型建议的题录（还没采用）'),

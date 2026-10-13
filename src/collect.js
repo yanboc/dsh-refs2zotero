@@ -21,6 +21,13 @@ const READ_ENVELOPE_RE = /^\s*<path>([\s\S]*?)<\/path>\s*<type>([\s\S]*?)<\/type
 const TITLE_LABEL_RE = /^[#>\s*]*\**\s*title\s*\**\s*[:：=]\s*(.+)$/im
 
 /**
+ * Source/script files are never bibliographic records, however record-shaped
+ * their lines (`title:`, `doi:` …) happen to be — reading a code file at an
+ * offset can land right on such keys.
+ */
+const CODE_EXT_RE = /\.(js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|c|h|cc|cpp|hpp|cs|php|sh|bash|zsh|json|ya?ml|toml|xml|css|scss|less|html?|vue|svelte|sql|r|m|swift|kt|dart|lua|pl|exs?|erl|hs|scala|fsx?|ini|conf|lock)$/i
+
+/**
  * @param {string} value
  * @returns {string}
  */
@@ -213,6 +220,7 @@ function fromPdfRead(args, text) {
     pdfPath,
     html: '',
     excerpt: excerptOf(body),
+    why: '助手读了这篇 PDF',
     kind: 'pdf',
   }
 }
@@ -240,6 +248,7 @@ export function stripPdfHeader(text) {
 function fromTextPage(filePath, rawText) {
   const { path: envelopePath, body } = stripReadEnvelope(rawText)
   const file = envelopePath || filePath
+  if (CODE_EXT_RE.test(file)) return null
   const head = body.split('\n').slice(0, TEXT_HEAD_LINES).join('\n')
   const window = body.slice(0, TEXT_HEAD_CHARS)
   const doi = extractDoi(head) || extractDoi(window)
@@ -263,6 +272,7 @@ function fromTextPage(filePath, rawText) {
     pdfPath: '',
     html: '',
     excerpt: excerptOf(body),
+    why: '助手读了这篇文本文件',
     kind: 'page',
   }
 }
@@ -310,6 +320,7 @@ function fromWeb(url, text) {
     pdfPath: '',
     html,
     excerpt: excerptOf(text),
+    why: pdfish ? '助手抓取了这篇 PDF' : '助手抓取了这篇文章网页',
     kind: pdfish ? 'pdf' : (arxiv ? 'pdf' : 'page'),
   }
 }
@@ -352,6 +363,7 @@ function fromPdfPath(filePath, text) {
     pdfPath: filePath,
     html: '',
     excerpt: excerptOf(text),
+    why: '助手读了这篇 PDF 文件',
     kind: 'pdf',
   }
 }
@@ -410,7 +422,7 @@ const DOI_LINK_RE = /doi\.org\/(10\.\d{4,9}\/[^\s"'<>()[\]`]+)/gi
  * @param {string} text
  * @returns {Array<import('./types.js').Reference>}
  */
-export function collectFromMessage(text) {
+export function collectFromMessage(text, why = '对话里引用') {
   if (typeof text !== 'string' || text.length === 0) return []
   // A code block or inline span is quoted content, not a citation: test
   // fixtures and pasted commands must not become rows.
@@ -424,7 +436,7 @@ export function collectFromMessage(text) {
   }
 
   for (const match of prose.matchAll(ARXIV_LINK_RE)) {
-    push(arxivMessageRef(match[1]))
+    push(arxivMessageRef(match[1], why))
   }
   for (const match of prose.matchAll(DOI_LINK_RE)) {
     const doi = match[1].replace(/[?*$.,;:)\)`]+$/g, '')
@@ -432,7 +444,7 @@ export function collectFromMessage(text) {
     // on the same row.
     const arxivDoi = /^10\.48550\/arxiv\.(\d{4}\.\d{4,5})$/i.exec(doi)
     if (arxivDoi) {
-      push(arxivMessageRef(arxivDoi[1]))
+      push(arxivMessageRef(arxivDoi[1], why))
       continue
     }
     if (!/^10\.\d{4,9}\//.test(doi)) continue
@@ -456,6 +468,7 @@ export function collectFromMessage(text) {
       excerpt: '',
       kind: 'page',
       fromMessage: true,
+      why,
     })
   }
   return refs
@@ -463,8 +476,9 @@ export function collectFromMessage(text) {
 
 /**
  * @param {string} arxiv
+ * @param {string} why
  */
-function arxivMessageRef(arxiv) {
+function arxivMessageRef(arxiv, why) {
   const doi = `10.48550/arxiv.${arxiv}`
   return {
     id: `doi:${doi.toLowerCase()}`,
@@ -481,5 +495,6 @@ function arxivMessageRef(arxiv) {
     excerpt: '',
     kind: 'pdf',
     fromMessage: true,
+    why,
   }
 }

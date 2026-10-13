@@ -246,3 +246,16 @@ test('an arXiv: label and empty text', () => {
   assert.deepEqual(collectFromMessage(''), [])
   assert.deepEqual(collectFromMessage('nothing to collect'), [])
 })
+
+test('a collected row remembers why it was added', () => {
+  assert.equal(collectFromMessage('see https://arxiv.org/abs/2608.25512')[0].why, '对话里引用')
+  assert.equal(collectFromMessage('see https://arxiv.org/abs/2608.25512', '你在对话里提到')[0].why, '你在对话里提到')
+  const web = collectRef('web_fetch', { url: 'https://journals.plos.org/x' }, 'Abstract: ' + 'body '.repeat(20))
+  assert.equal(web.why, '助手抓取了这篇文章网页')
+})
+
+test('reading a source file is never collected as a record', () => {
+  const ref = collectRef('read', { file_path: '/src/api.js' },
+    '<path>/src/api.js</path>\n<type>text/javascript</type>\n<content>\n1: title: meta.title || ref.title\n2: doi: meta.DOI || ref.doi\n3: authors: creatorText(meta.creators)\n</content>')
+  assert.equal(ref, null)
+})
