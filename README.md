@@ -25,9 +25,13 @@ harness 自带的 `web_fetch` 不支持 `application/pdf`，`read` 也拒绝二�
 ```sh
 pnpm install
 pnpm run build
+# 直接从这个仓库装（pnpm 支持 git 依赖）
+dsh plugin --profile <name> add github:yanboc/dsh-refs2zotero
+
+# 或者装本地目录：路径按你 clone 下来的目录名写，在它上一级执行
 dsh plugin --profile <name> add ./dsh-refs2zotero
 ```
 
-`dsh plugin add` 的相对路径从调用目录算起，在本目录的上一级执行。装好后打开 Web，侧边栏出现「参考文献」。
+`dist/` 不入库，所以先 `pnpm run build` 再装。装好后打开 Web，侧边栏出现「参考文献」。
 
 维护入口见 [AGENTS.md](AGENTS.md)。收集条件、写入顺序和测试见 [docs/behavior.md](docs/behavior.md)。
