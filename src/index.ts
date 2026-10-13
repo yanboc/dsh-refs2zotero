@@ -183,12 +183,22 @@ export function apply(ctx: Context): void {
   })
   // The route is what the sidebar talks to: register it before any optional
   // work, so a problem elsewhere can never leave the page without an endpoint.
+  const apiHandler = (req: IncomingMessage, res: ServerResponse): void => {
+    void handleHttp(req, res, { store, zotero, proposer, ignored })
+  }
   ctx.effect(() => host.webServer.register({
     kind: 'exact',
     path: '/dsh-refs2zotero/api',
-    handler: (req, res) => {
-      void handleHttp(req, res, { store, zotero, proposer, ignored })
-    },
+    handler: apiHandler,
+  }))
+  // Compatibility shim for a browser still running the pre-rename bundle: it
+  // polls `/zotero-refs/api`, and a route that no longer exists answers 405 with
+  // an empty body, which the page reports as "Unexpected end of JSON input".
+  // Remove once no page can predate the rename.
+  ctx.effect(() => host.webServer.register({
+    kind: 'exact',
+    path: '/zotero-refs/api',
+    handler: apiHandler,
   }))
   // Sessions that already exist when this plugin mounts (or remounts) get their
   // list rebuilt from the log; new ones are replayed as soon as they appear.
