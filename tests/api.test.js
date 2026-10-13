@@ -267,3 +267,21 @@ test('fetchPdf reports a row it cannot help', async () => {
   assert.equal(result.results[0].ok, false)
   assert.match(result.results[0].error, /没找到可下载的 PDF/)
 })
+
+test('refresh re-resolves the canonical record for a row with an identifier', async () => {
+  const store = createStore()
+  store.upsert('s1', ref)
+  const calls = []
+  const result = await handleApiRequest({ op: 'refresh', sessionId: 's1', id: ref.id }, {
+    store,
+    enricher: { resolve: async (sessionId, row) => calls.push(`${sessionId}:${row.id}`) },
+    zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
+  })
+  assert.equal(result.ok, true)
+  assert.deepEqual(calls, [`s1:${ref.id}`])
+  // A row without an identifier cannot be re-resolved.
+  const bare = { id: 'url:https://x', doi: '', arxiv: '', url: 'https://x', title: 'X' }
+  store.upsert('s1', bare)
+  const failed = await handleApiRequest({ op: 'refresh', sessionId: 's1', id: 'url:https://x' }, { store, enricher: { resolve: async () => {} } })
+  assert.equal(failed.ok, false)
+})

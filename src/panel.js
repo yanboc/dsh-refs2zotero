@@ -114,6 +114,16 @@ export function createApply(React) {
       dispatch({ type: 'message', text: result.ok ? (accept ? '已采用模型建议' : '已忽略模型建议') : (result.error || '操作失败') })
     }
 
+    async function onRefreshMeta(ref) {
+      if (ref.doi || ref.arxiv) {
+        dispatch({ type: 'message', text: '正在重新抓取题录…' })
+        const result = await post({ op: 'refresh', sessionId, id: ref.id })
+        dispatch({ type: 'message', text: result.ok ? '题录已更新' : (result.error || '更新失败') })
+        return
+      }
+      await onPropose(ref.id)
+    }
+
     async function onFindPdf(ids) {
       if (ids.length === 0) return
       dispatch({ type: 'fetching', ids })
@@ -190,16 +200,17 @@ export function createApply(React) {
           }),
           h(Badge, {
             rest: ref.hasPdf ? '已有PDF' : '暂无PDF',
-            hover: '查找PDF',
+            hover: ref.hasPdf ? '更新PDF' : '查找PDF',
             tone: ref.hasPdf ? 'muted' : undefined,
-            onClick: ref.hasPdf ? undefined : (() => { void onFindPdf([ref.id]) }),
+            onClick: () => { void onFindPdf([ref.id]) },
             disabled: busy,
           }),
           h(Badge, {
             rest: ref.resolved ? '已有元信息' : (ref.proposal ? '待确认题录' : '暂无元信息'),
-            hover: '查找元信息',
+            hover: ref.resolved ? '更新元信息' : '查找元信息',
             tone: ref.proposal ? 'business' : (ref.resolved ? 'muted' : undefined),
-            onClick: (ref.resolved || ref.proposal || !ref.canPropose) ? undefined : (() => { void onPropose(ref.id) }),
+            onClick: ref.resolved ? (() => { void onRefreshMeta(ref) })
+              : (ref.proposal || !ref.canPropose) ? undefined : (() => { void onPropose(ref.id) }),
           }),
           h('span', { className: 'zr-actions' },
             h(IconButton, {

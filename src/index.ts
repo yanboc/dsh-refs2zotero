@@ -184,7 +184,7 @@ export function apply(ctx: Context): void {
   // The route is what the sidebar talks to: register it before any optional
   // work, so a problem elsewhere can never leave the page without an endpoint.
   const apiHandler = (req: IncomingMessage, res: ServerResponse): void => {
-    void handleHttp(req, res, { store, zotero, proposer, archived })
+    void handleHttp(req, res, { store, zotero, proposer, archived, enricher })
   }
   ctx.effect(() => host.webServer.register({
     kind: 'exact',

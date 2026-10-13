@@ -4,7 +4,7 @@ import { loadPdfSource } from './pdf.js'
 
 /**
  * @param {Record<string, unknown>} body
- * @param {{ store: { list: (id: string) => any[], forget: (sessionId: string, id: string) => void, attach: (sessionId: string, id: string, pdf: Record<string, unknown>) => unknown }, zotero: { collections: () => Promise<any[]>, findByDoi: (doi: string) => Promise<boolean>, save: (refs: any[], collectionId: string) => Promise<any> }, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> }, archived?: { archive: (sessionId: string, id: string) => void, unarchive: (sessionId: string, id: string) => void, isArchived: (sessionId: string, id: string) => boolean }, fetch?: typeof fetch, pdfDir?: string }} deps
+ * @param {{ store: { list: (id: string) => any[], forget: (sessionId: string, id: string) => void, attach: (sessionId: string, id: string, pdf: Record<string, unknown>) => unknown }, zotero: { collections: () => Promise<any[]>, findByDoi: (doi: string) => Promise<boolean>, save: (refs: any[], collectionId: string) => Promise<any> }, proposer?: { available: boolean, propose: (ref: any) => Promise<Record<string, unknown> | null> }, archived?: { archive: (sessionId: string, id: string) => void, unarchive: (sessionId: string, id: string) => void, isArchived: (sessionId: string, id: string) => boolean }, enricher?: { resolve: (sessionId: string, ref: any) => Promise<void> }, fetch?: typeof fetch, pdfDir?: string }} deps
  */
 export async function handleApiRequest(body, deps) {
   if (!body || typeof body !== 'object') return { ok: false, error: '请求不是 JSON 对象' }
@@ -69,6 +69,17 @@ export async function handleApiRequest(body, deps) {
     else deps.archived.unarchive(body.sessionId, body.id)
     return { ok: true, archived: setArchived }
   }
+  if (body.op === 'refresh') {
+    if (typeof body.sessionId !== 'string' || typeof body.id !== 'string') {
+      return { ok: false, error: '更新题录需要 sessionId 和 id' }
+    }
+    const ref = deps.store.list(body.sessionId).find(row => row.id === body.id)
+    if (!ref) return { ok: false, error: '这一行不在了' }
+    if (!ref.doi && !ref.arxiv) return { ok: false, error: '这一行没有可重查的标识' }
+    if (!deps.enricher) return { ok: false, error: '宿主没有可用的题录服务' }
+    await deps.enricher.resolve(body.sessionId, ref)
+    return { ok: true }
+  }
   if (body.op === 'fetchPdf') {
     const ids = Array.isArray(body.ids) ? body.ids.filter(id => typeof id === 'string') : []
     if (typeof body.sessionId !== 'string' || ids.length === 0) {
@@ -131,7 +142,7 @@ export async function handleApiRequest(body, deps) {
 /**
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
- * @param {{ store: any, zotero: any, proposer?: any, archived?: any, fetch?: typeof fetch, pdfDir?: string }} deps
+ * @param {{ store: any, zotero: any, proposer?: any, archived?: any, enricher?: any, fetch?: typeof fetch, pdfDir?: string }} deps
  */
 export async function handleHttp(req, res, deps) {
   try {
