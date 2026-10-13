@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { collectRef, extractDoi } from '../src/collect.js'
+import { collectFromMessage, collectRef, extractDoi } from '../src/collect.js'
 
 test('doi extraction strips trailing punctuation', () => {
   assert.equal(extractDoi('see 10.1000/xyz123).'), '10.1000/xyz123')
@@ -217,4 +217,32 @@ test('a bare identifier is not mistaken for a pdf title', () => {
   const ref = collectRef('read', { file_path: '/papers/attention.pdf' }, '10.48550/arXiv.1810.04805')
   assert.equal(ref?.doi, '10.48550/arXiv.1810.04805')
   assert.equal(ref?.title, 'attention.pdf')
+})
+
+test('a message citing arxiv and doi links yields one row per identifier', () => {
+  const refs = collectFromMessage('see https://arxiv.org/abs/2608.25512 and https://doi.org/10.1000/xyz123')
+  assert.equal(refs.length, 2)
+  const arxiv = refs.find(ref => ref.arxiv === '2608.25512')
+  assert.ok(arxiv)
+  assert.equal(arxiv.id, 'doi:10.48550/arxiv.2608.25512')
+  assert.equal(arxiv.pdfUrl, 'https://arxiv.org/pdf/2608.25512.pdf')
+  assert.equal(refs.find(ref => ref.doi === '10.1000/xyz123').id, 'doi:10.1000/xyz123')
+})
+
+test('an arxiv link and its doi.org twin land on the same row', () => {
+  const refs = collectFromMessage('arxiv.org/abs/2608.25512 or https://doi.org/10.48550/arxiv.2608.25512')
+  assert.equal(refs.length, 1)
+  assert.equal(refs[0].id, 'doi:10.48550/arxiv.2608.25512')
+})
+
+test('a bare identifier, a bare url, or a local port is not a citation', () => {
+  assert.deepEqual(collectFromMessage('the DOI is 10.1000/xyz123'), [])
+  assert.deepEqual(collectFromMessage('see https://deepseek.com/blog/introducing-cordis'), [])
+  assert.deepEqual(collectFromMessage('connector http://127.0.0.1:23119'), [])
+})
+
+test('an arXiv: label and empty text', () => {
+  assert.equal(collectFromMessage('cite arXiv:2608.25512')[0].arxiv, '2608.25512')
+  assert.deepEqual(collectFromMessage(''), [])
+  assert.deepEqual(collectFromMessage('nothing to collect'), [])
 })

@@ -392,3 +392,94 @@ function decodeURIComponentSafe(value) {
 function cleanLine(value) {
   return value.replace(/\s+/g, ' ').trim()
 }
+
+const ARXIV_LINK_RE = /(?:arxiv\.org\/(?:abs|pdf)\/|arXiv:\s*)(\d{4}\.\d{4,5})(?:v\d+)?/gi
+const DOI_LINK_RE = /doi\.org\/(10\.\d{4,9}\/[^\s"'<>()[\]`]+)/gi
+
+/**
+ * Extract the references a chat message itself cites: a paper named through an
+ * `arxiv.org/abs/…` or `doi.org/…` link, or an `arXiv:<id>` label.
+ *
+ * Only these high-precision forms are collected. A bare `10.xxxx/…` in prose,
+ * a code snippet, or the port of some service is not a citation — and this
+ * session's own compaction summary is a user message that replays the whole
+ * history, so a loose identifier scan would turn it into a flood of junk rows.
+ * Blogs and other pages are still collected when they are actually fetched
+ * (`web_fetch`), where the page text yields a real title.
+ *
+ * @param {string} text
+ * @returns {Array<import('./types.js').Reference>}
+ */
+export function collectFromMessage(text) {
+  if (typeof text !== 'string' || text.length === 0) return []
+  // A code block or inline span is quoted content, not a citation: test
+  // fixtures and pasted commands must not become rows.
+  const prose = text.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]+`/g, ' ')
+  const refs = []
+  const seen = new Set()
+  const push = ref => {
+    if (!ref || seen.has(ref.id)) return
+    seen.add(ref.id)
+    refs.push(ref)
+  }
+
+  for (const match of prose.matchAll(ARXIV_LINK_RE)) {
+    push(arxivMessageRef(match[1]))
+  }
+  for (const match of prose.matchAll(DOI_LINK_RE)) {
+    const doi = match[1].replace(/[?*$.,;:)\)`]+$/g, '')
+    // Normalise the arXiv DOI form so an arxiv link and its doi.org twin land
+    // on the same row.
+    const arxivDoi = /^10\.48550\/arxiv\.(\d{4}\.\d{4,5})$/i.exec(doi)
+    if (arxivDoi) {
+      push(arxivMessageRef(arxivDoi[1]))
+      continue
+    }
+    if (!/^10\.\d{4,9}\//.test(doi)) continue
+    const suffix = doi.slice(doi.indexOf('/') + 1)
+    if (suffix.length < 3) continue
+    // The rest of the 10.48550/arxiv… family and placeholders like
+    // `10.48550/arxiv`, `arxiv.x`, or `10.1000/xxx` are not citations.
+    if (/^arxiv\b/i.test(suffix) || /xxx|\.\.\./i.test(suffix)) continue
+    push({
+      id: `doi:${doi.toLowerCase()}`,
+      title: '',
+      authors: '',
+      year: '',
+      doi,
+      arxiv: '',
+      url: '',
+      abstract: '',
+      pdfUrl: '',
+      pdfPath: '',
+      html: '',
+      excerpt: '',
+      kind: 'page',
+      fromMessage: true,
+    })
+  }
+  return refs
+}
+
+/**
+ * @param {string} arxiv
+ */
+function arxivMessageRef(arxiv) {
+  const doi = `10.48550/arxiv.${arxiv}`
+  return {
+    id: `doi:${doi.toLowerCase()}`,
+    title: '',
+    authors: '',
+    year: yearFromArxiv(arxiv),
+    doi,
+    arxiv,
+    url: `https://arxiv.org/abs/${arxiv}`,
+    abstract: '',
+    pdfUrl: `https://arxiv.org/pdf/${arxiv}.pdf`,
+    pdfPath: '',
+    html: '',
+    excerpt: '',
+    kind: 'pdf',
+    fromMessage: true,
+  }
+}

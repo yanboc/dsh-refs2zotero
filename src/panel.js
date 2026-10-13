@@ -5,9 +5,34 @@ import { GLYPH, createAtoms, ensureStyle } from './ui.js'
  * @param {typeof import('react')} React
  */
 export function createApply(React) {
-  const { createElement: h, useEffect, useReducer } = React
+  const { createElement: h, useEffect, useReducer, useState } = React
   const { IconButton, Badge, Glyph } = createAtoms(React)
   ensureStyle()
+
+  /** A labelled metadata line: "作者" before the value. */
+  function Field(key, value) {
+    return h('div', { className: 'zr-field' },
+      h('span', { className: 'zr-key' }, key),
+      h('span', { className: 'zr-fieldValue' }, value),
+    )
+  }
+
+  /** The abstract, collapsed by default so long previews stay scannable. */
+  function AbstractBlock({ text }) {
+    const [open, setOpen] = useState(false)
+    return h('div', null,
+      h('button', {
+        type: 'button',
+        className: 'zr-abstractToggle',
+        'aria-expanded': open,
+        onClick: event => { event.stopPropagation(); setOpen(!open) },
+      },
+        h('span', { className: 'zr-key' }, '摘要'),
+        h(Glyph, { paths: open ? GLYPH.chevronUp : GLYPH.chevronDown, size: 12 }),
+      ),
+      open ? h('div', { className: 'zr-abstract' }, text) : null,
+    )
+  }
 
   function Panel({ sessionId, visible }) {
     const [state, dispatch] = useReducer(reduce, undefined, () => {
@@ -189,21 +214,22 @@ export function createApply(React) {
     }
 
     function renderPreview(ref) {
-      const identifier = ref.doi ? `DOI ${ref.doi}` : (ref.arxiv ? `arXiv ${ref.arxiv}` : '')
+      const identifier = ref.arxiv ? ['arXiv', ref.arxiv] : (ref.doi ? ['DOI', ref.doi] : null)
       const venue = [ref.publicationTitle, ref.volume, ref.issue, ref.pages].filter(Boolean).join(' ')
+      const status = [
+        ref.hasPdf ? '有 PDF' : '没有 PDF',
+        ref.hasHtml ? '有网页快照' : '',
+        ref.inLibrary ? '已在库' : '',
+        ref.resolved ? '题录已按规范记录补全' : '',
+      ].filter(Boolean).join(' · ')
       return h('div', { className: 'zr-preview' },
-        ref.authors ? h('div', { className: 'zr-line' }, ref.authors) : null,
-        venue ? h('div', { className: 'zr-line' }, venue) : null,
-        identifier ? h('div', { className: 'zr-line' }, identifier) : null,
-        ref.url ? h('div', { className: 'zr-line' }, ref.url) : null,
-        h('div', { className: 'zr-line' },
-          [
-            ref.hasPdf ? '有 PDF' : '没有 PDF',
-            ref.hasHtml ? '有网页快照' : '',
-            ref.inLibrary ? '已在库' : '',
-            ref.resolved ? '题录已按规范记录补全' : '',
-          ].filter(Boolean).join(' · ')),
-        ref.abstract ? h('div', { className: 'zr-abstract' }, ref.abstract) : null,
+        ref.authors ? Field('作者', ref.authors) : null,
+        venue ? Field('期刊', venue) : null,
+        ref.year ? Field('年份', ref.year) : null,
+        identifier ? Field(identifier[0], identifier[1]) : null,
+        ref.url ? Field('链接', ref.url) : null,
+        status ? Field('状态', status) : null,
+        ref.abstract ? h(AbstractBlock, { text: ref.abstract }) : null,
         ref.proposal
           ? h('div', { className: 'zr-proposal' },
             h('div', { className: 'zr-proposalHead' }, '模型建议的题录（还没采用）'),

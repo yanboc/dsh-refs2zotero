@@ -183,3 +183,31 @@ test('disposing a session drops its rows', () => {
   store.drop('s')
   assert.deepEqual(store.list('s'), [])
 })
+
+test('a user or assistant message citing a paper becomes a row', () => {
+  const store = createStore()
+  const pending = createPending()
+  const session = { id: 's1' }
+  onSessionEvent(store, pending, session, {
+    type: 'user/message',
+    data: { message: { role: 'user', content: [{ type: 'text', text: '看这篇 https://arxiv.org/abs/1810.04805' }] } },
+  })
+  onSessionEvent(store, pending, session, {
+    type: 'assistant/message',
+    data: { message: { role: 'assistant', content: 'the DOI is https://doi.org/10.1000/abc123' } },
+  })
+  const rows = store.list('s1')
+  assert.equal(rows.length, 2)
+  assert.ok(rows.some(row => row.arxiv === '1810.04805'))
+  assert.ok(rows.some(row => row.doi === '10.1000/abc123'))
+})
+
+test('a message with no citation adds nothing', () => {
+  const store = createStore()
+  const pending = createPending()
+  onSessionEvent(store, pending, { id: 's1' }, {
+    type: 'assistant/message',
+    data: { message: { role: 'assistant', content: 'a bare doi 10.1000/xyz123 and port http://127.0.0.1:23119 are not citations' } },
+  })
+  assert.deepEqual(store.list('s1'), [])
+})

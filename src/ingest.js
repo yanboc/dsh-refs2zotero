@@ -1,4 +1,4 @@
-import { collectRef } from './collect.js'
+import { collectFromMessage, collectRef } from './collect.js'
 
 /**
  * @returns {Map<string, { name: string, arguments: unknown }>}
@@ -43,6 +43,19 @@ export function onSessionEvent(store, pending, session, event) {
   if (event.type === 'tool/call') {
     const data = event.data ?? {}
     pending.set(`${sessionId}:${data.callId}`, { name: String(data.name ?? ''), arguments: data.arguments })
+    return
+  }
+  if (event.type === 'user/message' || event.type === 'assistant/message') {
+    // References named in the chat itself: the user mentioning a paper, or the
+    // assistant citing one. The message sits under `data.message` with a
+    // `content` that is a string or an array of blocks.
+    const message = event.data?.message ?? event.data ?? {}
+    const text = textOf(message)
+    if (text) {
+      for (const ref of collectFromMessage(text)) {
+        store.upsert(sessionId, ref)
+      }
+    }
     return
   }
   if (event.type !== 'tool/result') return

@@ -57,7 +57,13 @@ button.zr-badge:hover .zr-badgeHover { display: inline; }
 .zr-icon:disabled { opacity: 0.4; cursor: default; }
 .zr-preview { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px 20px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; }
 .zr-line { color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-11); overflow-wrap: anywhere; }
+.zr-field { display: flex; gap: 8px; min-width: 0; line-height: 1.5; }
+.zr-key { flex: none; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-strong-11); }
+.zr-fieldValue { min-width: 0; color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-11); overflow-wrap: anywhere; }
 .zr-abstract { color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxs-12); line-height: 1.6; max-height: 168px; overflow-y: auto; }
+.zr-abstractToggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: none; background: none; color: var(--dsw-alias-label-secondary); font: var(--dsw-font-xxxs-strong-11); cursor: pointer; }
+.zr-abstractToggle:hover { color: var(--dsw-alias-label-primary); }
+.zr-abstractToggle:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: 1px; }
 .zr-proposal { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border: 1px dashed var(--dsw-alias-state-business-primary); border-radius: 4px; }
 .zr-proposalHead { font: var(--dsw-font-xxxs-strong-11); color: var(--dsw-alias-state-business-primary); }
 .zr-inlineActions { display: flex; align-items: center; gap: 6px; }
@@ -145,6 +151,8 @@ export function createAtoms(React) {
 
 export const GLYPH = {
   chevron: 'M6 4l4 4-4 4',
+  chevronDown: 'M4 6l4 4 4-4',
+  chevronUp: 'M4 10l4-4 4 4',
   download: 'M8 2v8m0 0L5 7m3 3l3-3M3 13h10',
   close: 'M4 4l8 8M12 4l-8 8',
   check: 'M3.5 8.5l3 3 6-6',
