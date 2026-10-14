@@ -1,0 +1,38 @@
+# Changelog
+
+本文件记录用户可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
+
+## [1.0.0] - 2026-10-14
+
+首个正式版本。侧边栏「参考文献」把当前会话实际读到的文献列出来，点选后写入本机 Zotero 的一个已有分类。
+
+### 收集
+
+- 收集带 DOI / arXiv 或摘要的网页、插件 `read_pdf` 工具读过的 PDF、带 `.pdf` 路径的 `read`。
+- 从对话正文收集链接形式的引用（`arxiv.org/abs|pdf/…`、`arXiv:<id>`、`doi.org/…`），忽略代码块、行内代码、裸 `10.xxxx/…` 与任意裸 URL，避免压缩摘要重放灌入垃圾。
+- `read` 按扩展名跳过源码/脚本文件；纯文本 `read` 只把文件开头当作记录，防止读源码时误收 `title:`/`doi:` 键。
+- 挂载时按每个会话的日志重放收集，改动条件后实时路径与重放路径共用同一套解析。
+
+### 题录
+
+- 能从 DOI 或 arXiv 解析就用规范记录（题名、作者、期刊卷期页）。
+- 解析不到时，把正文交给会话所用模型出一份题录，先在侧边栏显示，用户点「采用」才用于写入。
+- 查重走 Zotero 本地 API（`qmode=everything`）；API 关闭时按 warning 降级、照常写入。
+
+### 写入
+
+- 写入用户选中的已有分类；PDF 一并存入（缓存文件、本地 `.pdf`，或按 `pdfUrl`/arXiv id/页面 PDF 链接自行下载）。
+- 手里有网页时另存一份单文件快照。已在库的条目保留在列表并标记为已在库，不建第二条。
+- 笔记、新建分类，都不做。
+
+### 侧边栏
+
+- 条目两行显示（题名一行、元信息一行），预览带作者/期刊/年份/DOI/arXiv/链接/状态关键字，摘要默认折叠。
+- 行操作：忽略 / 找 PDF、归档语义、badge 即动作、排序、只看未归档（眼睛）、缺失项闪烁。
+- 每条带「备注」说明为什么进来（读了 PDF / 抓取了网页 / 用户在对话里提到 / 助手引用以支撑观点）。
+
+### 发布
+
+- 提供 `prepare` 脚本，支持从 GitHub 直接安装（`dsh plugin add github:yanboc/dsh-refs2zotero`）。
+- 支持 npm 安装（`dsh plugin add dsh-refs2zotero`）与 tarball。
+- MIT 许可。

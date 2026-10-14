@@ -20,21 +20,23 @@ harness 自带的 `web_fetch` 不支持 `application/pdf`，`read` 也拒绝二�
 
 ## 开始用
 
-桌面端 Zotero 开着，profile 里装有 [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) v0.4.0 及以上。
+桌面端 Zotero 开着，profile 里装有 [dsh-better-sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) v0.4.0 及以上。三种安装方式任选：
 
 ```sh
-pnpm install
-pnpm run build
-# 直接从这个仓库装（pnpm 支持 git 依赖）
+# 1) 从 npm（推荐：装的是预构建产物，无需构建授权）
+dsh plugin --profile <name> add dsh-refs2zotero
+
+# 2) 从 GitHub（安装时用 prepare 脚本现场构建，首次会要求授权该构建）
 dsh plugin --profile <name> add github:yanboc/dsh-refs2zotero
 
-# 或者装本地目录：路径按 clone 下来的目录名写，在它上一级执行
+# 3) 本地目录（开发用；路径按 clone 下来的目录名写，在它上一级执行）
+pnpm install && pnpm run build
 dsh plugin --profile <name> add ./dsh-refs2zotero
 ```
 
-`dist/` 不入库，所以先 `pnpm run build` 再装。装好后打开 Web，侧边栏出现「参考文献」。
+装好后打开 Web，侧边栏出现「参考文献」。
 
-维护入口见 [AGENTS.md](AGENTS.md)。收集条件、写入顺序和测试见 [docs/behavior.md](docs/behavior.md)。
+维护入口见 [AGENTS.md](AGENTS.md)。收集条件、写入顺序和测试见 [docs/behavior.md](docs/behavior.md)。变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可
 
