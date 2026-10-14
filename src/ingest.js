@@ -52,7 +52,7 @@ export function onSessionEvent(store, pending, session, event) {
     const message = event.data?.message ?? event.data ?? {}
     const text = textOf(message)
     if (text) {
-      for (const ref of collectFromMessage(text, event.type === 'user/message' ? '你在对话里提到' : '助手引用以支撑观点')) {
+      for (const ref of collectFromMessage(text, event.type === 'user/message' ? '用户在对话里提到' : '助手引用以支撑观点')) {
         store.upsert(sessionId, ref)
       }
     }

@@ -249,7 +249,7 @@ test('an arXiv: label and empty text', () => {
 
 test('a collected row remembers why it was added', () => {
   assert.equal(collectFromMessage('see https://arxiv.org/abs/2608.25512')[0].why, '对话里引用')
-  assert.equal(collectFromMessage('see https://arxiv.org/abs/2608.25512', '你在对话里提到')[0].why, '你在对话里提到')
+  assert.equal(collectFromMessage('see https://arxiv.org/abs/2608.25512', '用户在对话里提到')[0].why, '用户在对话里提到')
   const web = collectRef('web_fetch', { url: 'https://journals.plos.org/x' }, 'Abstract: ' + 'body '.repeat(20))
   assert.equal(web.why, '助手抓取了这篇文章网页')
 })
