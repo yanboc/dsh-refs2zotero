@@ -136,6 +136,20 @@ export async function handleApiRequest(body, deps) {
       return { ok: false, error: error instanceof Error ? error.message : '保存失败' }
     }
   }
+  if (body.op === 'resolveConflicts') {
+    if (typeof body.sessionId !== 'string' || !Array.isArray(body.ids) || typeof body.collectionId !== 'string' || body.collectionId.length === 0 || !['overwrite', 'duplicate', 'cancel'].includes(body.action)) {
+      return { ok: false, error: '处理冲突需要 sessionId、ids、action 和已有分类' }
+    }
+    const wanted = new Set(body.ids.filter(id => typeof id === 'string'))
+    const refs = deps.store.list(body.sessionId).filter(ref => wanted.has(ref.id))
+    if (refs.length === 0) return { ok: false, error: '没有可处理的冲突' }
+    try {
+      const result = await deps.zotero.resolveConflicts(body.action, refs, body.collectionId)
+      return { ok: true, ...result }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : '处理冲突失败' }
+    }
+  }
   return { ok: false, error: '未知操作' }
 }
 

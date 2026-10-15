@@ -83,11 +83,13 @@ harness 自己的两条路读不了 PDF（`web_fetch` 遇到 `application/pdf` �
 一批选中的行用一个新的 `sessionID`：
 
 1. `GET /connector/ping`。失败就告诉页面 Zotero 没开。
-2. 按 DOI 查重：`GET /api/users/0/items?q=<doi>&qmode=everything`。对得上的跳过。查重失败记进失败结果，不要静默丢掉。**`qmode=everything` 不能省**：Zotero 默认的 `q` 只搜题名、作者与年份，实测不带这个参数时任何 DOI 都查不中，于是每次写入都会新建重复条目。
+2. 按 DOI 查重：`GET /api/users/0/items?q=<doi>&qmode=everything`。对得上的一行**不直接写入，作为冲突返回侧边栏**；对不上的照常写入。查重失败记进失败结果，不要静默丢掉。**`qmode=everything` 不能省**：Zotero 默认的 `q` 只搜题名、作者与年份，实测不带这个参数时任何 DOI 都查不中，于是每次写入都会新建重复条目。
 3. 题录：DOI 用 `https://doi.org/{doi}`，`Accept: application/vnd.citationstyles.csl+json`。映射 `itemType`、`title`、`creators`、`date`、`DOI`、`url`、`abstractNote`、`publicationTitle`、`volume`、`issue`、`pages`。arXiv 用 arXiv API。条目 `id` 用这一行的稳定 id。
 4. `POST /connector/saveItems`，body 含 `sessionID` 和 `items`。
 5. `POST /connector/updateSession`，body 含 `sessionID` 和 `target`（分类树 id，形如 `C1`）。不要传 `note`。
 6. 有 PDF 时 `POST /connector/saveAttachment`。PDF 可以来自侧边栏的「找 PDF」：宿主按顺序试「这一行已有的 `pdfUrl` → 由 arXiv id 推出的 arXiv PDF → 页面里的 PDF 链接 → 按 DOI 问 OpenAlex 的开放获取副本」，同一个 DOI 的正式版优先于预印本，某个地址失败就试下一个，成功后缓存到本地并写回这一行。`X-Metadata` 里是 `sessionID`、`parentItemID`、`title`、`url`；正文是文件字节。本地路径（`read_pdf` 的缓存文件、`read` 到的 `.pdf`）直接读；没有本地文件时宿主自己找 PDF：`pdfUrl`、arXiv id（含 `10.48550/arXiv.…` 形式的 DOI）、页面里 `citation_pdf_url` 或 `.pdf` 链接。只下载 http(s)，不要下载回环地址。限制 20MB 并校验 `%PDF-`。手里有 HTML 时，用 connector 的单文件快照接口留下网页。
+
+写入分两步：**先写无冲突的行**，再让用户统一处理冲突。有冲突时，侧边栏在列表上方列出这些行（附库里的已有题名），用户勾选部分或全部、再选一种处理方式——「覆盖库里的条目」（`PATCH /api/users/0/items/<key>` 更新已有条目的题录字段、保留条目类型）、「两者都要」（当作新条目写一条）、「取消」（不写入这些）。确认后已处理的行从冲突区消失，继续处理剩下的，直到清空。
 
 分类列表来自 `POST /connector/getSelectedCollection` 的 `targets`。只展示已有项。
 

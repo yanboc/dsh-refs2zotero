@@ -17,6 +17,7 @@ export function createZotero(options = {}) {
     collections,
     findByDoi,
     save,
+    resolveConflicts,
   }
 
   async function ping() {
@@ -54,6 +55,15 @@ export function createZotero(options = {}) {
    * @returns {Promise<boolean>}
    */
   async function findByDoi(doi) {
+    return Boolean(await findDuplicate(doi))
+  }
+
+  /**
+   * The stored item that already carries this DOI, or null.
+   * @param {string} doi
+   * @returns {Promise<{ key: string, title: string } | null>}
+   */
+  async function findDuplicate(doi) {
     // `qmode=everything` is required: the default search only covers title,
     // creator, and year, so a plain `q=<doi>` never matches a stored DOI.
     const query = `q=${encodeURIComponent(doi)}&qmode=everything`
@@ -73,18 +83,21 @@ export function createZotero(options = {}) {
     }
     const body = await response.json()
     const items = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : []
-    return items.some(item => doiEqual(item?.data?.DOI, doi))
+    const match = items.find(item => doiEqual(item?.data?.DOI, doi))
+    return match ? { key: typeof match.key === 'string' ? match.key : '', title: typeof match.data?.title === 'string' ? match.data.title : '' } : null
   }
 
   /**
+   * Write the rows that are not already in the library, and report the ones
+   * that are, so the caller can ask the user how to resolve them.
    * @param {Array<Record<string, any>>} refs
    * @param {string} collectionId
    */
   async function save(refs, collectionId) {
     if (!collectionId) throw new Error('未选择分类')
     await ping()
-    /** @type {{ id: string, reason: string }[]} */
-    const skipped = []
+    /** @type {{ id: string, key: string, existingTitle: string }[]} */
+    const conflicts = []
     /** @type {{ id: string, reason: string }[]} */
     const failed = []
     /** @type {{ id: string, reason: string }[]} */
@@ -95,8 +108,9 @@ export function createZotero(options = {}) {
     for (const ref of refs) {
       if (ref.doi) {
         try {
-          if (await findByDoi(ref.doi)) {
-            skipped.push({ id: ref.id, reason: '已在库' })
+          const duplicate = await findDuplicate(ref.doi)
+          if (duplicate) {
+            conflicts.push({ id: ref.id, key: duplicate.key, existingTitle: duplicate.title })
             continue
           }
         } catch (error) {
@@ -116,34 +130,44 @@ export function createZotero(options = {}) {
       }
       pending.push(ref)
     }
-    if (pending.length === 0) return { saved: [], skipped, failed, warnings }
+    const written = await writeRefs(pending, collectionId)
+    return { saved: written.saved, conflicts, failed: [...failed, ...written.failed], warnings }
+  }
+
+  /**
+   * Create items for a set of rows, move them into the collection, and attach
+   * their PDFs/snapshots. Dedupe is the caller's job.
+   * @param {Array<Record<string, any>>} refs
+   * @param {string} collectionId
+   */
+  async function writeRefs(refs, collectionId) {
+    /** @type {{ id: string }[]} */
+    const saved = []
+    /** @type {{ id: string, reason: string }[]} */
+    const failed = []
+    if (refs.length === 0) return { saved, failed }
 
     const sessionID = `dsh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const items = []
     /** @type {Map<string, Record<string, any>>} */
     const metas = new Map()
-    for (const ref of pending) {
-      // The enricher already resolved this row for the sidebar; reuse it so the
-      // written entry matches what the user saw, and only look up on a miss.
-      const cached = ref.resolved && typeof ref.resolved === 'object' && Object.keys(ref.resolved).length > 0
-      const meta = cached ? ref.resolved : await resolveMetadata(ref, { fetch: fetchImpl })
+    for (const ref of refs) {
+      const meta = await metaFor(ref)
       metas.set(ref.id, meta)
       items.push(toConnectorItem(ref, meta))
     }
     const created = await postJson('/connector/saveItems', { sessionID, items })
     if (created.status !== 201 && created.status !== 200) {
-      for (const ref of pending) failed.push({ id: ref.id, reason: created.text || `保存失败 ${created.status}` })
-      return { saved: [], skipped, failed, warnings }
+      for (const ref of refs) failed.push({ id: ref.id, reason: created.text || `保存失败 ${created.status}` })
+      return { saved, failed }
     }
     const moved = await postJson('/connector/updateSession', { sessionID, target: collectionId })
     if (moved.status !== 200) {
-      for (const ref of pending) failed.push({ id: ref.id, reason: moved.text || '没能放进所选分类' })
-      return { saved: [], skipped, failed, warnings }
+      for (const ref of refs) failed.push({ id: ref.id, reason: moved.text || '没能放进所选分类' })
+      return { saved, failed }
     }
 
-    /** @type {{ id: string }[]} */
-    const saved = []
-    for (const ref of pending) {
+    for (const ref of refs) {
       try {
         const bytes = await loadPdf(ref)
         if (bytes) await postBytes('/connector/saveAttachment', attachmentMeta(sessionID, ref, metas.get(ref.id)), bytes)
@@ -164,7 +188,81 @@ export function createZotero(options = {}) {
         failed.push({ id: ref.id, reason: error instanceof Error ? error.message : '附件保存失败' })
       }
     }
-    return { saved, skipped, failed, warnings }
+    return { saved, failed }
+  }
+
+  /**
+   * Apply the user's choice for conflicting rows.
+   * @param {'overwrite' | 'duplicate' | 'cancel'} action
+   * @param {Array<Record<string, any>>} refs
+   * @param {string} collectionId
+   */
+  async function resolveConflicts(action, refs, collectionId) {
+    if (!collectionId) throw new Error('未选择分类')
+    if (action === 'cancel') {
+      return { results: refs.map(ref => ({ id: ref.id, action, ok: true })) }
+    }
+    await ping()
+    if (action === 'duplicate') {
+      const written = await writeRefs(refs, collectionId)
+      const failedBy = new Map(written.failed.map(item => [item.id, item.reason]))
+      return {
+        results: refs.map(ref => ({
+          id: ref.id,
+          action,
+          ok: !failedBy.has(ref.id),
+          error: failedBy.get(ref.id) || '',
+        })),
+      }
+    }
+    // overwrite: update the stored item's bibliographic fields, keep its type.
+    const results = []
+    for (const ref of refs) {
+      try {
+        const duplicate = await findDuplicate(ref.doi)
+        if (!duplicate || !duplicate.key) {
+          results.push({ id: ref.id, action, ok: false, error: '库里已找不到这一条，没法覆盖' })
+          continue
+        }
+        const meta = await metaFor(ref)
+        await patchItem(duplicate.key, ref, meta)
+        results.push({ id: ref.id, action, ok: true })
+      } catch (error) {
+        results.push({ id: ref.id, action, ok: false, error: error instanceof Error ? error.message : '覆盖失败' })
+      }
+    }
+    return { results }
+  }
+
+  /**
+   * The canonical record for a row: reuse what the enricher resolved, and only
+   * look up on a miss.
+   * @param {Record<string, any>} ref
+   */
+  async function metaFor(ref) {
+    const cached = ref.resolved && typeof ref.resolved === 'object' && Object.keys(ref.resolved).length > 0
+    return cached ? ref.resolved : await resolveMetadata(ref, { fetch: fetchImpl })
+  }
+
+  /**
+   * Overwrite an existing item's bibliographic fields, keeping its type.
+   * @param {string} key
+   * @param {Record<string, any>} ref
+   * @param {Record<string, any>} meta
+   */
+  async function patchItem(key, ref, meta) {
+    const item = toConnectorItem(ref, meta)
+    delete item.id
+    delete item.itemType
+    const response = await fetchImpl(`${baseUrl}/api/users/0/items/${encodeURIComponent(key)}`, {
+      method: 'PATCH',
+      headers: { ...connectorHeaders(), 'content-type': 'application/json' },
+      body: JSON.stringify(item),
+    })
+    if (response.status !== 200 && response.status !== 204) {
+      const text = await response.text().catch(() => '')
+      throw new Error(text || `覆盖失败 ${response.status}`)
+    }
   }
 
   /**

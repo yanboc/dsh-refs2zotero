@@ -268,6 +268,31 @@ test('fetchPdf reports a row it cannot help', async () => {
   assert.match(result.results[0].error, /没找到可下载的 PDF/)
 })
 
+test('resolveConflicts forwards the action and selected rows', async () => {
+  const store = createStore()
+  store.upsert('s1', ref)
+  let called
+  const deps = {
+    store,
+    zotero: {
+      findByDoi: async () => false,
+      collections: async () => [],
+      save: async () => ({}),
+      resolveConflicts: async (action, refs, collectionId) => {
+        called = { action, refs: refs.map(row => row.id), collectionId }
+        return { results: [{ id: ref.id, action, ok: true }] }
+      },
+    },
+  }
+  const result = await handleApiRequest({ op: 'resolveConflicts', sessionId: 's1', ids: [ref.id], action: 'overwrite', collectionId: 'C23' }, deps)
+  assert.equal(result.ok, true)
+  assert.deepEqual(called, { action: 'overwrite', refs: [ref.id], collectionId: 'C23' })
+  assert.deepEqual(result.results, [{ id: ref.id, action: 'overwrite', ok: true }])
+
+  const bad = await handleApiRequest({ op: 'resolveConflicts', sessionId: 's1', ids: [ref.id], action: 'explode', collectionId: 'C23' }, deps)
+  assert.equal(bad.ok, false)
+})
+
 test('refresh re-resolves the canonical record for a row with an identifier', async () => {
   const store = createStore()
   store.upsert('s1', ref)

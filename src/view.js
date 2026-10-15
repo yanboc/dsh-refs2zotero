@@ -17,6 +17,10 @@ export function initialState() {
     sortAsc: true,
     showArchived: false,
     flash: { collection: 0, rows: 0 },
+    conflicts: [],
+    conflictSelected: [],
+    conflictAction: 'overwrite',
+    resolvingConflicts: false,
   }
 }
 
@@ -89,6 +93,31 @@ export function reduce(state, action) {
   }
   if (action.type === 'message') return { ...state, message: action.text ?? '' }
   if (action.type === 'saving') return { ...state, saving: Boolean(action.value) }
+  if (action.type === 'conflicts') {
+    const conflicts = action.conflicts ?? []
+    return { ...state, conflicts, conflictSelected: conflicts.map(conflict => conflict.id), conflictAction: 'overwrite' }
+  }
+  if (action.type === 'conflictSelect') {
+    const conflictSelected = state.conflictSelected.includes(action.id)
+      ? state.conflictSelected.filter(id => id !== action.id)
+      : [...state.conflictSelected, action.id]
+    return { ...state, conflictSelected }
+  }
+  if (action.type === 'conflictSelectAll') {
+    const all = state.conflicts.map(conflict => conflict.id)
+    const allOn = all.length > 0 && all.every(id => state.conflictSelected.includes(id))
+    return { ...state, conflictSelected: allOn ? [] : all }
+  }
+  if (action.type === 'conflictAction') return { ...state, conflictAction: action.action ?? 'overwrite' }
+  if (action.type === 'conflictResolved') {
+    const done = new Set(action.ids ?? [])
+    return {
+      ...state,
+      conflicts: state.conflicts.filter(conflict => !done.has(conflict.id)),
+      conflictSelected: state.conflictSelected.filter(id => !done.has(id)),
+    }
+  }
+  if (action.type === 'resolvingConflicts') return { ...state, resolvingConflicts: Boolean(action.value) }
   return state
 }
 

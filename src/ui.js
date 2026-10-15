@@ -72,6 +72,19 @@ button.zr-badge:hover .zr-badgeHover { display: inline; }
 .zr-button:disabled { opacity: 0.5; cursor: default; }
 .zr-notice { flex: none; padding: 4px 12px 0; font: var(--dsw-font-xxs-12); color: var(--dsw-alias-label-tertiary); white-space: pre-wrap; }
 .zr-notice[data-tone='error'] { color: var(--dsw-alias-state-error-primary); }
+/* Conflict resolution: rows already in the library, waiting for a decision. */
+.zr-conflict { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); }
+.zr-conflictHead { display: flex; align-items: center; gap: 8px; }
+.zr-conflictHead span { font: var(--dsw-font-xxs-strong-12); color: var(--dsw-alias-state-warn-primary); }
+.zr-conflictHead .zr-button { margin-left: auto; }
+.zr-conflictList { display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto; }
+.zr-conflictRow { display: flex; align-items: flex-start; gap: 6px; padding: 4px 6px; border-radius: 4px; }
+.zr-conflictRow:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.zr-conflictText { min-width: 0; }
+.zr-conflictTitle { color: var(--dsw-alias-label-primary); font: var(--dsw-font-xxs-12); overflow-wrap: anywhere; }
+.zr-conflictExisting { color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); overflow-wrap: anywhere; }
+.zr-conflictActions { display: flex; align-items: center; gap: 6px; }
+.zr-conflictActions .zr-control { flex: 1; height: 24px; }
 .zr-empty { padding: 16px; text-align: center; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxs-12); }
 .zr-foot { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-base); }
 .zr-footRow { display: flex; align-items: center; gap: 6px; }
@@ -82,6 +95,7 @@ button.zr-badge:hover .zr-badgeHover { display: inline; }
 .zr-control:focus-visible { outline: 2px solid var(--dsw-alias-interactive-bg-hover-accent); outline-offset: -1px; }
 .zr-primary { box-sizing: border-box; flex: none; height: 28px; padding: 0 12px; border: none; border-radius: 3px; background: var(--dsw-alias-state-business-primary); color: var(--dsw-alias-bg-base); font: var(--dsw-font-xxs-strong-12); cursor: pointer; }
 .zr-primary[data-disabled='true'] { opacity: 0.4; cursor: default; }
+.zr-primary:disabled { opacity: 0.4; cursor: default; }
 .zr-hint { min-width: 0; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
 /* The "you still need to pick this" flash: a warn ring that pulses twice. */
 .zr-flash { animation: zr-flash 600ms var(--ds-ease-in-out) 2; }

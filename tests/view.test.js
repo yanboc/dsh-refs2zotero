@@ -119,6 +119,25 @@ test('the metadata badge is an action only when there is something to fetch', ()
   assert.equal(metaBadgeAction({}), null)
 })
 
+test('conflicts are selected and resolved in batches', () => {
+  let state = reduce(initialState(), {
+    type: 'conflicts',
+    conflicts: [{ id: 'a', key: 'K', existingTitle: 'A' }, { id: 'b', key: 'K2', existingTitle: 'B' }],
+  })
+  assert.deepEqual(state.conflictSelected, ['a', 'b'])
+  state = reduce(state, { type: 'conflictSelect', id: 'a' })
+  assert.deepEqual(state.conflictSelected, ['b'])
+  state = reduce(state, { type: 'conflictAction', action: 'cancel' })
+  assert.equal(state.conflictAction, 'cancel')
+  state = reduce(state, { type: 'conflictResolved', ids: ['b'] })
+  assert.deepEqual(state.conflicts, [{ id: 'a', key: 'K', existingTitle: 'A' }])
+  assert.deepEqual(state.conflictSelected, [])
+  state = reduce(state, { type: 'conflictSelectAll' })
+  assert.deepEqual(state.conflictSelected, ['a'])
+  state = reduce(state, { type: 'conflictSelectAll' })
+  assert.deepEqual(state.conflictSelected, [])
+})
+
 test('flash increments the part that is missing', () => {
   let state = initialState()
   state = reduce(state, { type: 'flash', collection: true })

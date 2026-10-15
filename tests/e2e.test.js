@@ -74,7 +74,7 @@ test('a page read in a session is saved into a chosen collection with its pdf', 
     })
     assert.equal(saved.ok, true)
     assert.deepEqual(saved.saved, [{ id: 'doi:10.48550/arxiv.1810.04805' }])
-    assert.deepEqual(saved.skipped, [])
+    assert.deepEqual(saved.conflicts, [])
     assert.deepEqual(saved.failed, [])
 
     // The list and collections reads above already talked to the connector;
@@ -117,7 +117,7 @@ test('a page read in a session is saved into a chosen collection with its pdf', 
   }
 })
 
-test('a row already in the library is reported as skipped and never re-saved', async () => {
+test('a row already in the library is reported as a conflict and never re-saved', async () => {
   const connector = await startFakeConnector({ libraryHasDoi: true })
   const store = createStore()
   const pending = createPending()
@@ -139,7 +139,7 @@ test('a row already in the library is reported as skipped and never re-saved', a
       collectionId: 'C1',
     })
     assert.deepEqual(saved.saved, [])
-    assert.deepEqual(saved.skipped, [{ id: 'doi:10.48550/arxiv.1810.04805', reason: '已在库' }])
+    assert.deepEqual(saved.conflicts, [{ id: 'doi:10.48550/arxiv.1810.04805', key: 'KEY1', existingTitle: 'An existing copy' }])
     // The library lookup from `list` happens first; the write phase adds a ping
     // and its own lookup, then stops without ever calling saveItems.
     assert.deepEqual(connector.calls().slice(1).map(call => call.path), [
@@ -357,7 +357,7 @@ async function startFakeConnector(options) {
       const path = new URL(req.url, 'http://127.0.0.1').pathname
       if (path === '/connector/ping') return send(res, 200, 'Zotero is running')
       if (path === '/api/users/0/items') {
-        const items = options.libraryHasDoi ? [{ data: { DOI: '10.48550/arXiv.1810.04805' } }] : []
+        const items = options.libraryHasDoi ? [{ key: 'KEY1', data: { DOI: '10.48550/arXiv.1810.04805', title: 'An existing copy' } }] : []
         return send(res, 200, JSON.stringify(items))
       }
       if (path === '/connector/getSelectedCollection') {

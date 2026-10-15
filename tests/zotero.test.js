@@ -119,7 +119,7 @@ test('save writes items, moves them into the collection, and attaches a pdf', as
       seen.push({ method: req.method, url: req.url, headers: req.headers, raw })
       if (req.url.startsWith('/api/users/0/items')) {
         const doi = new URL(req.url, 'http://zotero.local').searchParams.get('q')
-        const items = doi === '10.1000/old' ? [{ data: { DOI: '10.1000/old' } }] : []
+        const items = doi === '10.1000/old' ? [{ key: 'OLDKEY', data: { DOI: '10.1000/old', title: 'Old Title' } }] : []
         json(res, 200, items)
         return
       }
@@ -176,7 +176,7 @@ test('save writes items, moves them into the collection, and attaches a pdf', as
 
   await server.close()
 
-  assert.deepEqual(result.skipped, [{ id: 'doi:10.1000/old', reason: '已在库' }])
+  assert.deepEqual(result.conflicts, [{ id: 'doi:10.1000/old', key: 'OLDKEY', existingTitle: 'Old Title' }])
   assert.deepEqual(result.saved.map(item => item.id), ['doi:10.1000/new', 'arxiv:1706.03762'])
   assert.deepEqual(result.failed, [])
 
@@ -206,6 +206,62 @@ test('save writes items, moves them into the collection, and attaches a pdf', as
   const snap = bodyJson(seen, '/connector/saveSingleFile')
   assert.match(snap.snapshotContent, /<html>/)
   assert.equal(snap.items[0].id, 'doi:10.1000/new')
+})
+
+test('resolveConflicts overwrites, duplicates, or cancels as chosen', async () => {
+  const seen = []
+  const server = await listen((req, res) => {
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks)
+      seen.push({ method: req.method, url: req.url, raw })
+      const path = new URL(req.url, 'http://zotero.local').pathname
+      if (req.method === 'PATCH' && path === '/api/users/0/items/OLDKEY') {
+        res.writeHead(204)
+        res.end()
+        return
+      }
+      if (path === '/connector/ping') return json(res, 200, {})
+      if (path === '/api/users/0/items') {
+        json(res, 200, [{ key: 'OLDKEY', data: { DOI: '10.1000/old', title: 'Old Title' } }])
+        return
+      }
+      if (path === '/connector/saveItems') return json(res, 201, {})
+      if (path === '/connector/updateSession') return json(res, 200, {})
+      res.writeHead(404)
+      res.end()
+    })
+  })
+
+  const zotero = createZotero({
+    baseUrl: server.url,
+    fetch: async (url, init) => {
+      if (String(url).startsWith('https://doi.org/')) return { ok: true, json: async () => ({ title: 'New Title' }) }
+      return fetch(url, init)
+    },
+  })
+  const ref = { id: 'doi:10.1000/old', kind: 'page', title: 'Collected', doi: '10.1000/old', url: '', authors: '', year: '', abstract: '', pdfUrl: '', pdfPath: '', html: '', arxiv: '' }
+
+  // cancel touches nothing
+  let result = await zotero.resolveConflicts('cancel', [ref], 'C1')
+  assert.deepEqual(result.results, [{ id: ref.id, action: 'cancel', ok: true }])
+  assert.equal(seen.length, 0)
+
+  // overwrite patches the stored item
+  result = await zotero.resolveConflicts('overwrite', [ref], 'C1')
+  assert.deepEqual(result.results, [{ id: ref.id, action: 'overwrite', ok: true }])
+  const patch = seen.find(call => call.method === 'PATCH')
+  assert.ok(patch)
+  assert.equal(JSON.parse(patch.raw.toString()).title, 'New Title')
+
+  // duplicate creates a new item
+  seen.length = 0
+  result = await zotero.resolveConflicts('duplicate', [ref], 'C1')
+  assert.equal(result.results[0].ok, true)
+  assert.ok(seen.some(call => call.url === '/connector/saveItems'))
+
+  await server.close()
 })
 
 function bodyJson(seen, url) {

@@ -88,11 +88,38 @@ export function createApply(React) {
         dispatch({ type: 'message', text: result.error || '保存失败' })
         return
       }
+      const conflicts = result.conflicts ?? []
+      if (conflicts.length > 0) dispatch({ type: 'conflicts', conflicts })
       const parts = [`已写入 ${result.saved?.length ?? 0} 条`]
-      if (result.skipped?.length) parts.push(`已在库 ${result.skipped.length} 条`)
+      if (conflicts.length > 0) parts.push(`${conflicts.length} 条已在库里，请在下方选择处理方式`)
       for (const item of result.failed ?? []) parts.push(item.reason)
       for (const item of result.warnings ?? []) parts.push(item.reason)
       dispatch({ type: 'message', text: parts.join('，') })
+    }
+
+    async function onResolveConflicts() {
+      if (state.conflictSelected.length === 0) {
+        dispatch({ type: 'flash', rows: true })
+        return
+      }
+      dispatch({ type: 'resolvingConflicts', value: true })
+      dispatch({ type: 'message', text: '' })
+      const result = await post({
+        op: 'resolveConflicts',
+        sessionId,
+        collectionId: state.collectionId,
+        action: state.conflictAction,
+        ids: state.conflictSelected,
+      })
+      dispatch({ type: 'resolvingConflicts', value: false })
+      if (!result.ok) {
+        dispatch({ type: 'message', text: result.error || '处理冲突失败' })
+        return
+      }
+      const results = result.results ?? []
+      const okCount = results.filter(item => item.ok).length
+      dispatch({ type: 'conflictResolved', ids: state.conflictSelected })
+      dispatch({ type: 'message', text: `已处理 ${okCount}/${results.length} 条冲突` })
     }
 
     async function onAddToLibrary(id) {
@@ -259,6 +286,54 @@ export function createApply(React) {
       )
     }
 
+    function renderConflicts() {
+      const allOn = state.conflicts.length > 0 && state.conflictSelected.length === state.conflicts.length
+      return h('div', { className: 'zr-conflict' },
+        h('div', { className: 'zr-conflictHead' },
+          h('span', null, `有 ${state.conflicts.length} 条文献已在库里`),
+          h('button', { type: 'button', className: 'zr-button', onClick: () => dispatch({ type: 'conflictSelectAll' }) },
+            allOn ? '取消全选' : '全选'),
+        ),
+        h('div', { className: 'zr-conflictList' },
+          state.conflicts.map(conflict => {
+            const ref = state.refs.find(row => row.id === conflict.id)
+            const selected = state.conflictSelected.includes(conflict.id)
+            return h('div', { className: 'zr-conflictRow', key: conflict.id },
+              h('input', {
+                type: 'checkbox',
+                className: 'zr-check',
+                'aria-label': `处理 ${ref?.title || conflict.existingTitle || '这条文献'}`,
+                checked: selected,
+                onChange: () => dispatch({ type: 'conflictSelect', id: conflict.id }),
+              }),
+              h('div', { className: 'zr-conflictText' },
+                h('div', { className: 'zr-conflictTitle' }, ref?.title || '(没有题名)'),
+                conflict.existingTitle ? h('div', { className: 'zr-conflictExisting' }, `库里已有：${conflict.existingTitle}`) : null,
+              ),
+            )
+          }),
+        ),
+        h('div', { className: 'zr-conflictActions' },
+          h('select', {
+            className: 'zr-control',
+            'aria-label': '冲突处理方式',
+            value: state.conflictAction,
+            onChange: event => dispatch({ type: 'conflictAction', action: event.target.value }),
+          },
+            h('option', { value: 'overwrite' }, '覆盖库里的条目'),
+            h('option', { value: 'duplicate' }, '两者都要（新建一条）'),
+            h('option', { value: 'cancel' }, '取消（不写入这些）'),
+          ),
+          h('button', {
+            type: 'button',
+            className: 'zr-primary',
+            disabled: state.conflictSelected.length === 0 || state.resolvingConflicts,
+            onClick: () => { void onResolveConflicts() },
+          }, state.resolvingConflicts ? '处理中…' : '确认处理'),
+        ),
+      )
+    }
+
     return h('div', { className: 'zr-root' },
       h('div', { className: 'zr-head' },
         h('input', {
@@ -279,6 +354,7 @@ export function createApply(React) {
           onClick: () => dispatch({ type: 'toggleArchived' }),
         }, h(Glyph, { paths: GLYPH.eye })),
       ),
+      state.conflicts.length > 0 ? renderConflicts() : null,
       h('div', { className: 'zr-scroll' },
         h('div', { className: 'zr-band' },
           h('select', {
