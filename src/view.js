@@ -164,6 +164,22 @@ export function viewModel(state) {
 }
 
 /**
+ * What the metadata badge does for a row, or null when it is a plain label.
+ * A DOI or arXiv id is enough to fetch the canonical record, so an untitled
+ * row can still refresh its metadata; a row with only an excerpt falls back
+ * to asking the model; a row with neither has nothing to fetch.
+ * @param {{ resolved?: boolean, proposal?: unknown, doi?: string, arxiv?: string, canPropose?: boolean }} ref
+ * @returns {'refresh' | 'propose' | null}
+ */
+export function metaBadgeAction(ref) {
+  if (ref.resolved) return 'refresh'
+  if (ref.proposal) return null
+  if (ref.doi || ref.arxiv) return 'refresh'
+  if (ref.canPropose) return 'propose'
+  return null
+}
+
+/**
  * Say why the write button is disabled. A grey button with no reason reads as a
  * broken page; the user cannot tell "pick a collection first" from "nothing is
  * selected".

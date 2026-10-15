@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { collectionStorageKey, initialState, reduce, sortRefs, viewModel, visibleRows } from '../src/view.js'
+import { collectionStorageKey, initialState, metaBadgeAction, reduce, sortRefs, viewModel, visibleRows } from '../src/view.js'
 
 const papers = [
   { id: 'a', title: 'Attention', authors: 'Vaswani', doi: '10.1000/a', url: 'https://example.test/a', year: '2017', hasPdf: true, inLibrary: false },
@@ -102,6 +102,21 @@ test('setArchived and toggleArchived flip their flags', () => {
   assert.equal(state.refs[0].archived, true)
   state = reduce(state, { type: 'toggleArchived' })
   assert.equal(state.showArchived, true)
+})
+
+test('the metadata badge is an action only when there is something to fetch', () => {
+  // Resolved rows re-fetch the canonical record.
+  assert.equal(metaBadgeAction({ resolved: true }), 'refresh')
+  // A DOI or arXiv id is enough to fetch metadata, even with no title or excerpt.
+  assert.equal(metaBadgeAction({ doi: '10.1000/a' }), 'refresh')
+  assert.equal(metaBadgeAction({ arxiv: '1810.04805' }), 'refresh')
+  // With no identifier, an excerpt lets the model propose a record.
+  assert.equal(metaBadgeAction({ canPropose: true }), 'propose')
+  // A pending proposal wins: the user must adopt or ignore it first.
+  assert.equal(metaBadgeAction({ proposal: {} }), null)
+  assert.equal(metaBadgeAction({ proposal: {}, doi: '10.1000/a' }), null)
+  // Nothing to fetch: a static label.
+  assert.equal(metaBadgeAction({}), null)
 })
 
 test('flash increments the part that is missing', () => {

@@ -1,4 +1,4 @@
-import { collectionStorageKey, initialState, reduce, viewModel } from './view.js'
+import { collectionStorageKey, initialState, metaBadgeAction, reduce, viewModel } from './view.js'
 import { GLYPH, createAtoms, ensureStyle } from './ui.js'
 
 /**
@@ -162,6 +162,7 @@ export function createApply(React) {
       const selected = state.selected.includes(ref.id)
       const expanded = state.previewId === ref.id
       const busy = state.fetching.includes(ref.id)
+      const metaAction = metaBadgeAction(ref)
       const meta = [shortAuthors(ref.authors), ref.year, ref.publicationTitle].filter(Boolean)
       return h('div', {
         key: ref.id,
@@ -209,8 +210,9 @@ export function createApply(React) {
             rest: ref.resolved ? '已有元信息' : (ref.proposal ? '待确认题录' : '暂无元信息'),
             hover: ref.resolved ? '更新元信息' : '查找元信息',
             tone: ref.proposal ? 'business' : (ref.resolved ? 'muted' : undefined),
-            onClick: ref.resolved ? (() => { void onRefreshMeta(ref) })
-              : (ref.proposal || !ref.canPropose) ? undefined : (() => { void onPropose(ref.id) }),
+            onClick: metaAction === 'refresh' ? (() => { void onRefreshMeta(ref) })
+              : metaAction === 'propose' ? (() => { void onPropose(ref.id) })
+              : undefined,
           }),
           h('span', { className: 'zr-actions' },
             h(IconButton, {
