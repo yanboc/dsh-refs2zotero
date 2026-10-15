@@ -1,0 +1,74 @@
+name: publish
+
+# 推送到 main 时自动发布：先跑构建/类型/测试，再发布到 npm 并创建 GitHub Release。
+# 两者都是幂等的——版本已存在就跳过，重复推送不会报红。
+#
+# 前置：在仓库 Settings → Secrets and variables → Actions 里加一个名为 NPM_TOKEN
+# 的 secret，值是 npm 的「Automation」或「Granular Access Token」类型的令牌
+# （要有对 dsh-refs2zotero 的 publish 权限，并允许绕过 2FA）。
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # 创建 release / tag 需要
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm test
+
+  npm-publish:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Publish to npm
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "dsh-refs2zotero@${VERSION}" version >/dev/null 2>&1; then
+            echo "dsh-refs2zotero@${VERSION} 已在 npm 上，跳过发布"
+          else
+            npm publish --registry=https://registry.npmjs.org
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub Release
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "release v${VERSION} 已存在，跳过"
+          else
+            gh release create "v${VERSION}" \
+              --target "$GITHUB_SHA" \
+              --title "dsh-refs2zotero ${VERSION}" \
+              --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

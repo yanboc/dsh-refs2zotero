@@ -2,6 +2,16 @@
 
 本文件记录用户可见的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-10-14
+
+### 修复
+
+- 没有题名、但有 DOI 或 arXiv 标识的文献，「暂无元信息」badge 现在可以点击重查题录（此前只有正文够长、能让模型补题录时才可点）。唯一标识符（DOI / arXiv）本身就是重查题录的充分条件。
+
+### 工程
+
+- 新增 GitHub Actions：推送到 `main` 后自动跑构建、类型检查与测试，然后把当前版本发布到 npm 并创建 GitHub Release（版本已存在则跳过）。
+
 ## [1.0.0] - 2026-10-14
 
 首个正式版本。侧边栏「参考文献」把当前会话实际读到的文献列出来，点选后写入本机 Zotero 的一个已有分类。

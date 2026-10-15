@@ -1,6 +1,6 @@
 {
   "name": "dsh-refs2zotero",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "把当前会话读到的文献写入本机 Zotero。",
   "license": "MIT",
   "repository": {
