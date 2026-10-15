@@ -310,3 +310,24 @@ test('refresh re-resolves the canonical record for a row with an identifier', as
   const failed = await handleApiRequest({ op: 'refresh', sessionId: 's1', id: 'url:https://x' }, { store, enricher: { resolve: async () => {} } })
   assert.equal(failed.ok, false)
 })
+
+test('refresh resolves every selected row that has an identifier', async () => {
+  const store = createStore()
+  store.upsert('s1', ref)
+  store.upsert('s1', { ...ref, id: 'url:https://x', doi: '', arxiv: '', title: 'No id' })
+  const calls = []
+  const deps = {
+    store,
+    enricher: { resolve: async (sessionId, row) => calls.push(`${sessionId}:${row.id}`) },
+    zotero: { findByDoi: async () => false, collections: async () => [], save: async () => ({}) },
+  }
+  const result = await handleApiRequest({ op: 'refresh', sessionId: 's1', ids: [ref.id, 'url:https://x'] }, deps)
+  assert.equal(result.ok, true)
+  // Only the row with a DOI is re-resolved; the identifier-less row is skipped.
+  assert.deepEqual(calls, [`s1:${ref.id}`])
+  assert.deepEqual(result.results.map(item => [item.id, item.ok]), [[ref.id, true], ['url:https://x', false]])
+
+  // When every selected row lacks an identifier the whole call fails.
+  const none = await handleApiRequest({ op: 'refresh', sessionId: 's1', ids: ['url:https://x'] }, deps)
+  assert.equal(none.ok, false)
+})

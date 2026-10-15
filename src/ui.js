@@ -175,6 +175,8 @@ export const GLYPH = {
   // Same box with an up arrow: restore from archive.
   restore: 'M3 5h10v9H3z M6 5V3h4v2 M8 8v2.5 M6.5 8.5L8 7l1.5 1.5',
   eye: ['M2 8s2.5-3.5 6-3.5S14 8 14 8s-2.5 3.5-6 3.5S2 8 2 8z', 'M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z'],
+  // Two arcs chasing each other with arrowheads: refresh.
+  refresh: ['M2 8a6 6 0 0 1 9.6-4.8', 'M12 1v2.5H9.5', 'M14 8a6 6 0 0 1-9.6 4.8', 'M4 15v-2.5h2.5'],
   arrowUp: 'M8 12V4m0 0L5 7m3-3l3 3',
   arrowDown: 'M8 4v8m0 0l3-3m-3 3l-3-3',
 }

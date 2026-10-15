@@ -151,6 +151,19 @@ export function createApply(React) {
       await onPropose(ref.id)
     }
 
+    async function onRefreshSelected(ids) {
+      if (ids.length === 0) return
+      dispatch({ type: 'message', text: '正在重查题录…' })
+      const result = await post({ op: 'refresh', sessionId, ids })
+      if (!result.ok) {
+        dispatch({ type: 'message', text: result.error || '更新失败' })
+        return
+      }
+      const results = result.results ?? []
+      const okCount = results.filter(item => item.ok).length
+      dispatch({ type: 'message', text: `已重查 ${okCount}/${results.length} 条题录` })
+    }
+
     async function onFindPdf(ids) {
       if (ids.length === 0) return
       dispatch({ type: 'fetching', ids })
@@ -374,6 +387,10 @@ export function createApply(React) {
           h('span', { className: 'zr-bandCount' }, `${model.rows.length}/${state.refs.length}`),
           state.selected.length > 0
             ? h('span', { className: 'zr-bandAction' },
+              h(IconButton, {
+                title: `更新选中的 ${state.selected.length} 条的元信息`,
+                onClick: () => { void onRefreshSelected(state.selected) },
+              }, h(Glyph, { paths: GLYPH.refresh })),
               h(IconButton, {
                 title: `为选中的 ${state.selected.length} 条找 PDF`,
                 onClick: () => { void onFindPdf(state.selected) },

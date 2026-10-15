@@ -70,15 +70,33 @@ export async function handleApiRequest(body, deps) {
     return { ok: true, archived: setArchived }
   }
   if (body.op === 'refresh') {
-    if (typeof body.sessionId !== 'string' || typeof body.id !== 'string') {
-      return { ok: false, error: '更新题录需要 sessionId 和 id' }
+    if (typeof body.sessionId !== 'string' || body.sessionId.length === 0) {
+      return { ok: false, error: '更新题录需要 sessionId' }
     }
-    const ref = deps.store.list(body.sessionId).find(row => row.id === body.id)
-    if (!ref) return { ok: false, error: '这一行不在了' }
-    if (!ref.doi && !ref.arxiv) return { ok: false, error: '这一行没有可重查的标识' }
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter(id => typeof id === 'string')
+      : (typeof body.id === 'string' ? [body.id] : [])
+    if (ids.length === 0) return { ok: false, error: '更新题录需要 id' }
     if (!deps.enricher) return { ok: false, error: '宿主没有可用的题录服务' }
-    await deps.enricher.resolve(body.sessionId, ref)
-    return { ok: true }
+    const rows = deps.store.list(body.sessionId)
+    const results = []
+    for (const id of ids) {
+      const ref = rows.find(row => row.id === id)
+      if (!ref) {
+        results.push({ id, ok: false, error: '这一行不在了' })
+        continue
+      }
+      if (!ref.doi && !ref.arxiv) {
+        results.push({ id, ok: false, error: '这一行没有可重查的标识' })
+        continue
+      }
+      await deps.enricher.resolve(body.sessionId, ref)
+      results.push({ id, ok: true })
+    }
+    if (results.every(item => !item.ok)) {
+      return { ok: false, error: results[0]?.error || '没有可重查的行', results }
+    }
+    return { ok: true, results }
   }
   if (body.op === 'fetchPdf') {
     const ids = Array.isArray(body.ids) ? body.ids.filter(id => typeof id === 'string') : []
